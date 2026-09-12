@@ -162,13 +162,15 @@ jobs:
       - name: Install pinned wails3 CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS3_VERSION }}
 
-      - name: Build and package .app (ad-hoc signed)
-        run: wails3 task package
+      - name: Build and package universal .app (arm64 + amd64, ad-hoc signed)
+        # package:universal builds both architectures and lipo-merges them
+        # into a single binary before creating the .app bundle.
+        run: wails3 task package:universal
 
       - name: Zip .app bundle (preserves exec permissions)
         run: |
           cd bin
-          zip -r -y canvaslms-gui-darwin-arm64.app.zip canvaslms-gui.app
+          zip -r -y canvaslms-gui-darwin-universal.app.zip canvaslms-gui.app
           rm -rf canvaslms-gui.app
 
       - name: Upload artifacts
@@ -177,5 +179,5 @@ jobs:
           name: canvaslms-gui-macos
           path: |
             bin/canvaslms-gui
-            bin/canvaslms-gui-darwin-arm64.app.zip
+            bin/canvaslms-gui-darwin-universal.app.zip
           if-no-files-found: error

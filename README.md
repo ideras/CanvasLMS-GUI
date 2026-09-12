@@ -110,7 +110,7 @@ Frontend and desktop behavior (dialogs, event delivery, window lifecycle) is val
 | Test | `ubuntu-24.04` | `go vet` + `go test -race` |
 | Linux | `ubuntu-24.04` | binary + `deb` + `rpm` (GTK4/WebKitGTK 6.0) |
 | Windows | `ubuntu-24.04` | cross-compiled `.exe` (CGO-free; GUI not validated in CI) |
-| macOS | `macos-14` | ad-hoc signed `.app` zip (arm64) |
+| macOS | `macos-14` | universal (arm64 + amd64) ad-hoc signed `.app` zip |
 
 macOS requires a macOS runner (the Apple SDK cannot exist on Linux); Windows cross-compiles with `CGO_ENABLED=0` per the pinned v3 Taskfile. Artifacts are downloadable from the workflow run page for manual smoke testing on each OS.
 
