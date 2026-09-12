@@ -46,6 +46,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
 
+      # main.go embeds frontend/dist; the stub keeps go vet/test compilable
+      # without running the full frontend build (that happens in build jobs).
+      - name: Create frontend/dist embed stub
+        run: mkdir -p frontend/dist && touch frontend/dist/index.html
+
       - name: Vet
         run: go vet ./...
 
