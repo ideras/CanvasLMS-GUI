@@ -177,9 +177,10 @@ jobs:
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS3_VERSION }}
 
       - name: Build and package universal .app (arm64 + amd64, ad-hoc signed)
-        # package:universal builds both architectures and lipo-merges them
-        # into a single binary before creating the .app bundle.
-        run: wails3 task package:universal
+        # package:universal (namespaced darwin:) builds both architectures
+        # and lipo-merges them into a single binary before creating the .app
+        # bundle.
+        run: wails3 task darwin:package:universal
 
       - name: Zip .app bundle (preserves exec permissions)
         run: |
