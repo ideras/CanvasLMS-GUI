@@ -1,0 +1,19 @@
+# Weils build files and folders
+build/
+node_modules
+frontend/dist
+
+# Application configuration file
+config.json
+
+# VSCode folders
+.vscode/
+
+# AI Coding agents files
+AGENTS.md
+CLAUDE.md
+.gitnexus/
+.claude/
+
+# Don't ignore cache
+!internal/cache/

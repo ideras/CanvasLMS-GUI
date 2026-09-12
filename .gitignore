@@ -1,0 +1,10 @@
+# Weils build files and folders
+build/
+node_modules
+frontend/dist
+
+# Application configuration file
+config.json
+
+# VSCode folders
+.vscode/
