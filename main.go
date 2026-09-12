@@ -2,11 +2,9 @@ package main
 
 import (
 	"embed"
+	"log"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
@@ -15,26 +13,44 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 
-	err := wails.Run(&options.App{
-		Title:     "CanvasLMS GUI",
-		Width:     1100,
-		Height:    750,
-		MinWidth:  800,
-		MinHeight: 600,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	wailsApp := application.New(application.Options{
+		Name:        "CanvasLMS GUI",
+		Description: "Desktop GUI for Canvas LMS management",
+		Services: []application.Service{
+			application.NewService(app),
 		},
-		BackgroundColour: &options.RGBA{R: 214, G: 234, B: 248, A: 255},
-		OnStartup:        app.startup,
-		Bind: []interface{}{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 		},
-		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHiddenInset(),
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
 
-	if err != nil {
-		println("Error:", err.Error())
+	// Create the main window. The returned handle is handed to the service
+	// (kept private) so desktop operations such as dialogs attach to it.
+	mainWindow := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "CanvasLMS GUI",
+		Width:            1100,
+		Height:           750,
+		MinWidth:         800,
+		MinHeight:        600,
+		BackgroundColour: application.NewRGBA(214, 234, 248, 255),
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent:   true,
+				HideTitle:            true,
+				FullSizeContent:      true,
+				UseToolbar:           true,
+				HideToolbarSeparator: true,
+			},
+		},
+		URL: "/",
+	})
+
+	app.setDesktop(wailsApp, mainWindow)
+
+	if err := wailsApp.Run(); err != nil {
+		log.Fatal(err)
 	}
 }

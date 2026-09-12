@@ -7,7 +7,7 @@
   import AssignmentScoresModal from './AssignmentScoresModal.svelte'
   import DownloadSubmissionsModal from './DownloadSubmissionsModal.svelte'
   import AnnouncementsTab from './AnnouncementsTab.svelte'
-  import { ListCourseItems, ListStudents, GetCourseStats, InvalidateCourse, ListAssignments } from '../../wailsjs/go/main/App.js'
+  import { ListCourseItems, ListStudents, GetCourseStats, InvalidateCourse, ListAssignments } from '../../bindings/canvaslms-gui/app.js'
 
   export let course
   export let onUpload

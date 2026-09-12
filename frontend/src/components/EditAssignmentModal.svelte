@@ -1,5 +1,5 @@
 <script>
-  import { EditAssignment, GetAssignmentGroups, CreateAssignmentGroup } from '../../wailsjs/go/main/App.js'
+  import { EditAssignment, GetAssignmentGroups, CreateAssignmentGroup } from '../../bindings/canvaslms-gui/app.js'
   import { toasts } from 'svelte-toasts'
 
   export let course

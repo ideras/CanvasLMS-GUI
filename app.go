@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"canvaslms-gui/internal/adapters"
 	"canvaslms-gui/internal/api"
 	"canvaslms-gui/internal/cache"
 	"canvaslms-gui/internal/courses"
@@ -38,7 +39,13 @@ type App struct {
 	configPath    string
 	currentCourse *models.Course
 	cancelUpload  context.CancelFunc
+	uploadDone    <-chan struct{}
 	cacheStore    cache.Store
+
+	// Desktop handles for v3 runtime operations (dialogs, events). Kept
+	// private on purpose: they must not become part of the frontend API.
+	wailsApp   *application.App
+	mainWindow application.Window
 }
 
 // NewApp creates the application struct.
@@ -46,8 +53,26 @@ func NewApp() *App {
 	return &App{}
 }
 
-// startup is called by Wails at launch.
-func (a *App) startup(ctx context.Context) {
+// setDesktop wires the v3 application and main-window handles used for
+// desktop operations. Called from main before Run.
+func (a *App) setDesktop(wailsApp *application.App, win application.Window) {
+	a.wailsApp = wailsApp
+	a.mainWindow = win
+}
+
+// emitEvent sends an application event to the frontend using the v3 event
+// bus, preserving the v2 event contract (name + map payload).
+func (a *App) emitEvent(name string, data map[string]any) {
+	if a.wailsApp != nil {
+		a.wailsApp.Event.Emit(name, data)
+	}
+}
+
+// ServiceStartup is called by Wails v3 when the service starts. A non-nil
+// return aborts application startup, so only genuinely fatal conditions may
+// return an error; current initialization errors remain recoverable and are
+// reported through the app:error event as before.
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	a.ctx = ctx
 
 	a.config = loadConfig()
@@ -59,22 +84,45 @@ func (a *App) startup(ctx context.Context) {
 	// NeedsSetup() and open the settings dialog.
 	baseURL, token := a.effectiveCredentials()
 	if token == "" {
-		return
+		return nil
 	}
 
 	if err := a.initClientAndCache(baseURL, token); err != nil {
-		runtime.EventsEmit(ctx, "app:error", map[string]any{"message": err.Error()})
-		return
+		a.emitEvent("app:error", map[string]any{"message": err.Error()})
+		return nil
 	}
 
 	// Auto-restore last course.
 	if a.config.LastCourseID != 0 {
 		if _, err := a.SelectCourse(a.config.LastCourseID); err != nil {
-			runtime.EventsEmit(ctx, "app:error", map[string]any{
+			a.emitEvent("app:error", map[string]any{
 				"message": fmt.Sprintf("failed to restore course %d: %v", a.config.LastCourseID, err),
 			})
 		}
 	}
+	return nil
+}
+
+// ServiceShutdown cancels in-flight work and releases resources. Bounded
+// waiting ensures a stalled network operation cannot hang application exit.
+func (a *App) ServiceShutdown() error {
+	if a.cancelUpload != nil {
+		a.cancelUpload()
+		a.cancelUpload = nil
+	}
+	if a.uploadDone != nil {
+		select {
+		case <-a.uploadDone:
+		case <-time.After(3 * time.Second):
+			// Bounded wait expired; proceed with shutdown anyway.
+		}
+		a.uploadDone = nil
+	}
+	if a.cacheStore != nil {
+		_ = a.cacheStore.Close()
+		a.cacheStore = nil
+	}
+	return nil
 }
 
 // effectiveCredentials returns the Canvas base URL and API token to use,
@@ -347,12 +395,32 @@ func (a *App) DeleteAnnouncement(courseID, topicID int) error {
 	return a.client.DeleteAnnouncement(a.ctx, courseID, topicID)
 }
 
+// openFileDialog shows a native single-file open dialog attached to the
+// main window. An empty path means the user cancelled.
+func (a *App) openFileDialog(opts *application.OpenFileDialogOptions) (string, error) {
+	if a.wailsApp == nil {
+		return "", fmt.Errorf("desktop runtime not initialized")
+	}
+	return a.wailsApp.Dialog.OpenFileWithOptions(opts).AttachToWindow(a.mainWindow).PromptForSingleSelection()
+}
+
+// saveFileDialog shows a native save dialog attached to the main window.
+// An empty path means the user cancelled.
+func (a *App) saveFileDialog(opts *application.SaveFileDialogOptions) (string, error) {
+	if a.wailsApp == nil {
+		return "", fmt.Errorf("desktop runtime not initialized")
+	}
+	return a.wailsApp.Dialog.SaveFileWithOptions(opts).AttachToWindow(a.mainWindow).PromptForSingleSelection()
+}
+
 // UploadAnnouncementAttachment opens a file picker, ensures an "Anuncios"
 // folder in the course, uploads the file, and returns its metadata so the
 // frontend can embed a download link in the announcement message.
 func (a *App) UploadAnnouncementAttachment(courseID int) (*models.FileInfo, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select file to attach",
+	path, err := a.openFileDialog(&application.OpenFileDialogOptions{
+		Title:              "Select file to attach",
+		CanChooseFiles:     true,
+		CanCreateDirectories: true,
 	})
 	if err != nil {
 		return nil, err
@@ -388,9 +456,9 @@ func (a *App) DownloadAnnouncementFile(fileURL, suggestedName string) error {
 		return fmt.Errorf("resolve download URL for file %d: %w", fileID, err)
 	}
 
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Save Announcement Attachment",
-		DefaultFilename: defaultName,
+	path, err := a.saveFileDialog(&application.SaveFileDialogOptions{
+		Title:    "Save Announcement Attachment",
+		Filename: defaultName,
 	})
 	if err != nil {
 		return err
@@ -441,10 +509,10 @@ func (a *App) ListStudents(courseID int) ([]models.User, error) {
 // ExportStudentsCSV opens a save dialog and writes the student roster as CSV.
 // Returns the path of the saved file, or an empty string if the user cancelled.
 func (a *App) ExportStudentsCSV(courseID int) (string, error) {
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Save Student List",
-		DefaultFilename: fmt.Sprintf("students_course_%d.csv", courseID),
-		Filters: []runtime.FileFilter{
+	path, err := a.saveFileDialog(&application.SaveFileDialogOptions{
+		Title:    "Save Student List",
+		Filename: fmt.Sprintf("students_course_%d.csv", courseID),
+		Filters: []application.FileFilter{
 			{DisplayName: "CSV Files", Pattern: "*.csv"},
 		},
 	})
@@ -461,10 +529,10 @@ func (a *App) ExportStudentsCSV(courseID int) (string, error) {
 // ExportScoresCSV opens a save dialog and writes a grades matrix CSV
 // (canvas_id, student_name, one column per assignment/quiz).
 func (a *App) ExportScoresCSV(courseID int) (string, error) {
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Save Scores",
-		DefaultFilename: fmt.Sprintf("scores_course_%d.csv", courseID),
-		Filters: []runtime.FileFilter{
+	path, err := a.saveFileDialog(&application.SaveFileDialogOptions{
+		Title:    "Save Scores",
+		Filename: fmt.Sprintf("scores_course_%d.csv", courseID),
+		Filters: []application.FileFilter{
 			{DisplayName: "CSV Files", Pattern: "*.csv"},
 		},
 	})
@@ -488,9 +556,10 @@ func (a *App) ListSubmissions(courseID, assignmentID int) ([]models.Submission, 
 // --- Grades Upload ---
 
 func (a *App) BrowseCSVFile() (string, error) {
-	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Grades CSV",
-		Filters: []runtime.FileFilter{
+	return a.openFileDialog(&application.OpenFileDialogOptions{
+		Title:          "Select Grades CSV",
+		CanChooseFiles: true,
+		Filters: []application.FileFilter{
 			{DisplayName: "CSV Files", Pattern: "*.csv"},
 		},
 	})
@@ -498,8 +567,10 @@ func (a *App) BrowseCSVFile() (string, error) {
 
 // BrowseDirectory opens a native OS directory picker and returns the selected path.
 func (a *App) BrowseDirectory() (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Output Folder",
+	return a.openFileDialog(&application.OpenFileDialogOptions{
+		Title:                "Select Output Folder",
+		CanChooseDirectories: true,
+		CanChooseFiles:       false,
 	})
 }
 
@@ -507,7 +578,8 @@ func (a *App) BrowseDirectory() (string, error) {
 // Progress is reported via Wails events: upload:status, upload:file_progress,
 // upload:batch_progress, upload:done, upload:error.
 func (a *App) UploadGrades(courseID int, assignmentID int, csvPath string) {
-	a.cancelUpload = uploader.UploadGrades(a.ctx, a.client, courseID, assignmentID, csvPath)
+	emitter := adapters.NewWailsEmitter()
+	a.cancelUpload, a.uploadDone = uploader.UploadGrades(a.ctx, a.client, emitter, courseID, assignmentID, csvPath)
 }
 
 // CancelUpload cancels a running grade upload.
@@ -529,10 +601,10 @@ func (app *App) ExportQuizQuestions(courseID, quizID int, quizTitle string, form
 	safeTitle := export.SanitizeFilename(quizTitle)
 	defaultName := fmt.Sprintf("quiz_%d_%s_questions.md", quizID, safeTitle)
 
-	path, err := runtime.SaveFileDialog(app.ctx, runtime.SaveDialogOptions{
-		Title:           "Save Quiz Questions",
-		DefaultFilename: defaultName,
-		Filters: []runtime.FileFilter{
+	path, err := app.saveFileDialog(&application.SaveFileDialogOptions{
+		Title:    "Save Quiz Questions",
+		Filename: defaultName,
+		Filters: []application.FileFilter{
 			{DisplayName: "Markdown Files (*.md)", Pattern: "*.md"},
 			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
 			{DisplayName: "HTML Files (*.html)", Pattern: "*.html"},
@@ -552,11 +624,13 @@ func (app *App) ExportQuizQuestions(courseID, quizID int, quizTitle string, form
 // Opens a directory picker, then writes one file per student in the background.
 // Progress is reported via Wails events: submissions:progress, submissions:done, submissions:error.
 func (app *App) ExportQuizSubmissions(courseID, quizID int, format string) {
-	dir, err := runtime.OpenDirectoryDialog(app.ctx, runtime.OpenDialogOptions{
-		Title: "Select Output Folder for Quiz Submissions",
+	dir, err := app.openFileDialog(&application.OpenFileDialogOptions{
+		Title:                "Select Output Folder for Quiz Submissions",
+		CanChooseDirectories: true,
+		CanChooseFiles:       false,
 	})
 	if err != nil {
-		runtime.EventsEmit(app.ctx, "submissions:error", map[string]any{"error": err.Error()})
+		app.emitEvent("submissions:error", map[string]any{"error": err.Error()})
 		return
 	}
 	if dir == "" {
@@ -564,7 +638,7 @@ func (app *App) ExportQuizSubmissions(courseID, quizID int, format string) {
 	}
 
 	go func() {
-		runtime.EventsEmit(app.ctx, "submissions:start", map[string]any{
+		app.emitEvent("submissions:start", map[string]any{
 			"message": "Downloading submissions...",
 		})
 
@@ -572,7 +646,7 @@ func (app *App) ExportQuizSubmissions(courseID, quizID int, format string) {
 		msg, err := app.exporter.ExportQuizSubmissions(courseID, quizID, format, dir,
 			func(current, total int, student string) {
 				lastTotal = total
-				runtime.EventsEmit(app.ctx, "submissions:progress", map[string]any{
+				app.emitEvent("submissions:progress", map[string]any{
 					"current": current,
 					"total":   total,
 					"student": student,
@@ -580,10 +654,10 @@ func (app *App) ExportQuizSubmissions(courseID, quizID int, format string) {
 				time.Sleep(80 * time.Millisecond)
 			})
 		if err != nil {
-			runtime.EventsEmit(app.ctx, "submissions:error", map[string]any{"error": err.Error()})
+			app.emitEvent("submissions:error", map[string]any{"error": err.Error()})
 			return
 		}
-		runtime.EventsEmit(app.ctx, "submissions:done", map[string]any{
+		app.emitEvent("submissions:done", map[string]any{
 			"message": msg,
 			"total":   lastTotal,
 		})
@@ -596,7 +670,7 @@ func (app *App) ExportQuizSubmissions(courseID, quizID int, format string) {
 // assign-dl:done, assign-dl:error.
 func (app *App) ExportAssignmentSubmissions(courseID, assignmentID int, dirPath string) {
 	go func() {
-		runtime.EventsEmit(app.ctx, "assign-dl:start", map[string]any{
+		app.emitEvent("assign-dl:start", map[string]any{
 			"message": "Downloading submissions...",
 		})
 
@@ -604,7 +678,7 @@ func (app *App) ExportAssignmentSubmissions(courseID, assignmentID int, dirPath 
 		msg, err := app.exporter.ExportAssignmentSubmissions(courseID, assignmentID, dirPath,
 			func(current, total int, student string) {
 				lastTotal = total
-				runtime.EventsEmit(app.ctx, "assign-dl:progress", map[string]any{
+				app.emitEvent("assign-dl:progress", map[string]any{
 					"current": current,
 					"total":   total,
 					"student": student,
@@ -612,10 +686,10 @@ func (app *App) ExportAssignmentSubmissions(courseID, assignmentID int, dirPath 
 			},
 		)
 		if err != nil {
-			runtime.EventsEmit(app.ctx, "assign-dl:error", map[string]any{"error": err.Error()})
+			app.emitEvent("assign-dl:error", map[string]any{"error": err.Error()})
 			return
 		}
-		runtime.EventsEmit(app.ctx, "assign-dl:done", map[string]any{
+		app.emitEvent("assign-dl:done", map[string]any{
 			"message": msg,
 			"total":   lastTotal,
 		})

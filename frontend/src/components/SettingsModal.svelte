@@ -1,5 +1,5 @@
 <script>
-  import { SaveSettings, GetConfig, TokenFromEnv } from '../../wailsjs/go/main/App.js'
+  import { SaveSettings, GetConfig, TokenFromEnv } from '../../bindings/canvaslms-gui/app.js'
   import { onMount } from 'svelte'
 
   export let onClose        // called with no args when user cancels (only if app is already configured)

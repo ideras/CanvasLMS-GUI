@@ -2,7 +2,7 @@
 
 A cross-platform desktop client for **Canvas LMS** that helps instructors and administrators manage course information without working directly with the Canvas API.
 
-Built with Go, Wails, Svelte, and Vite.
+Built with Go, Wails v3, Svelte, and Vite.
 
 ## Features
 
@@ -20,30 +20,31 @@ Built with Go, Wails, Svelte, and Vite.
 
 - Go 1.25 or later
 - Node.js and npm
-- [Wails v2](https://wails.io/docs/gettingstarted/installation/)
-- The platform dependencies required by Wails for your operating system
+- [Wails v3 CLI](https://v3.wails.io/getting-started/installation/) — the project is built against the pinned version:
+
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.20
+```
+
+- The platform dependencies required by Wails v3 for your operating system. On Linux the default build uses the GTK4 + WebKitGTK 6.0 stack (`libgtk-4-1`, `libwebkitgtk-6.0-4` on Ubuntu 24.04+/Debian 13+). A legacy GTK3 + WebKit2GTK 4.1 fallback exists via the `gtk3` build tag (supported through v3.0.x).
+
+Verify the toolchain at any time with `wails3 doctor`.
 
 ## Development
 
-Install the frontend dependencies:
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-Start the application in development mode:
+Install dependencies and start the application in development mode:
 
 ```bash
 make dev
 ```
 
-Alternatively, run:
+Equivalent direct invocation:
 
 ```bash
-wails dev -tags webkit2_41
+wails3 task dev
 ```
+
+Dev mode regenerates Go bindings into `frontend/bindings/`, builds the frontend, and launches the desktop window.
 
 ## Build
 
@@ -53,7 +54,17 @@ Create a production build with:
 make build
 ```
 
-The application binary is written to `build/bin/`.
+The application binary is written to `bin/canvaslms-gui` (root `bin/`). Linux packages (deb/rpm/AppImage) are produced with `wails3 task package`.
+
+### Regenerating frontend bindings
+
+Bindings are regenerated automatically by the build/dev tasks. To regenerate them manually:
+
+```bash
+wails3 generate bindings -clean=true -time-type=Date -d frontend/bindings
+```
+
+Do not hand-edit files under `frontend/bindings/` — they are generated. If a build fails after changing exported `App` methods, regenerate and commit the updated bindings.
 
 ## Canvas configuration
 
@@ -85,11 +96,14 @@ Run the Go test suite with:
 
 ```bash
 go test ./...
+go test -race ./internal/...
 ```
+
+Frontend and desktop behavior (dialogs, event delivery, window lifecycle) is validated with real desktop smoke checks; browser-only Vite preview is not sufficient proof of native integration.
 
 ## Tech stack
 
-- **Backend:** Go and Wails v2
+- **Backend:** Go and Wails v3 (v3.0.0-beta.20)
 - **Frontend:** Svelte and Vite
 - **Local storage:** SQLite
 - **Document conversion:** `github.com/ideras/md-to-pdf`

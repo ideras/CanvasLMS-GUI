@@ -1,7 +1,8 @@
 <script>
-  import { ExportQuizQuestions, ExportQuizSubmissions } from '../../wailsjs/go/main/App.js'
+  import { ExportQuizQuestions, ExportQuizSubmissions } from '../../bindings/canvaslms-gui/app.js'
+  import { Events } from '@wailsio/runtime'
   import { toasts } from 'svelte-toasts'
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
   import iconUpload from '../assets/images/icon-upload.svg'
   import iconQuestions from '../assets/images/icon-questions.svg'
@@ -24,27 +25,26 @@
     : items.filter(i => i.type === typeFilter)
 
   onMount(() => {
-    window.runtime.EventsOn('submissions:start', () => {
-      submissionsProgress = { current: 0, total: 1, loading: true }
-    })
-    window.runtime.EventsOn('submissions:progress', (p) => {
-      submissionsProgress = p
-    })
-    window.runtime.EventsOn('submissions:done', (d) => {
-      submissionsProgress = { current: d.total, total: d.total, done: true }
-      setTimeout(() => {
+    const unsubs = [
+      Events.On('submissions:start', () => {
+        submissionsProgress = { current: 0, total: 1, loading: true }
+      }),
+      Events.On('submissions:progress', (p) => {
+        submissionsProgress = p.data
+      }),
+      Events.On('submissions:done', (d) => {
+        submissionsProgress = { current: d.data.total, total: d.data.total, done: true }
+        setTimeout(() => {
+          submissionsProgress = null
+          toasts.success(d.data.message)
+        }, 1200)
+      }),
+      Events.On('submissions:error', (e) => {
         submissionsProgress = null
-        toasts.success(d.message)
-      }, 1200)
-    })
-    window.runtime.EventsOn('submissions:error', (e) => {
-      submissionsProgress = null
-      toasts.error(e.error || 'Download failed')
-    })
-  })
-
-  onDestroy(() => {
-    window.runtime.EventsOff('submissions:start', 'submissions:progress', 'submissions:done', 'submissions:error')
+        toasts.error(e.data.error || 'Download failed')
+      }),
+    ]
+    return () => unsubs.forEach((off) => off())
   })
 
   function formatDate(d) {

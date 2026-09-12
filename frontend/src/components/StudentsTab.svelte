@@ -1,5 +1,5 @@
 <script>
-  import { GetStudentSubmissions, ExportStudentsCSV } from '../../wailsjs/go/main/App.js'
+  import { GetStudentSubmissions, ExportStudentsCSV } from '../../bindings/canvaslms-gui/app.js'
   import { toasts } from 'svelte-toasts'
 
   export let course

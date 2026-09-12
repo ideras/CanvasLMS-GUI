@@ -1,7 +1,18 @@
-# Weils build files and folders
-build/
-node_modules
+# Build outputs (binaries, installers, transient packaging artifacts)
+bin/
+build/bin/
+build/linux/appimage/build/
+build/linux/appimage/*.AppDir/
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+build/linux/*.desktop.generated
+
+# Frontend build outputs and dependencies
 frontend/dist
+node_modules
+frontend/node_modules
+
+# Task runner cache
+.task
 
 # Application configuration file
 config.json
