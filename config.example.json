@@ -1,0 +1,6 @@
+{
+    "canvas_base_url": "https://your-institution.instructure.com",
+    "api_token": "REPLACE_WITH_YOUR_CANVAS_API_TOKEN",
+    "last_course_id": 0,
+    "course_set": []
+}

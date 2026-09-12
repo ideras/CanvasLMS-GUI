@@ -57,7 +57,27 @@ The application binary is written to `build/bin/`.
 
 ## Canvas configuration
 
-On first launch, enter your Canvas instance URL and an API token. Keep credentials local—do not add tokens or the generated `config.json` file to version control.
+On first launch, enter your Canvas instance URL and an API token. The settings dialog persists them to `config.json` in the working directory (or next to the executable).
+
+To configure the app manually, copy the example file and fill in your own values:
+
+```bash
+cp config.example.json config.json
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `canvas_base_url` | string | Base URL of your Canvas instance |
+| `api_token` | string | Canvas API access token |
+| `last_course_id` | number | Last selected course; restored on launch (`0` for none) |
+| `course_set` | number[] | Saved set of course IDs |
+
+Credentials may also be supplied through environment variables, which take precedence over `config.json`:
+
+- `CANVAS_BASE_URL`
+- `CANVAS_API_TOKEN`
+
+Keep credentials local—do not add tokens or the generated `config.json` file to version control. Generate a token under *Account → Settings → New Access Token*.
 
 ## Testing
 
