@@ -1,0 +1,183 @@
+# Builds deployable artifacts for all supported desktop platforms.
+#
+# Runner strategy (Wails v3 cross-compile reality):
+#   - Linux:  built natively on ubuntu-24.04 (GTK4 + WebKitGTK 6.0)
+#   - Windows: cross-compiled from ubuntu-24.04 — the pinned v3 Taskfile
+#     cross-compiles with CGO_ENABLED=0 (go-webview2 is syscall-based),
+#     so no Windows runner or mingw toolchain is needed. Note: this
+#     produces the binary but does NOT validate the GUI at runtime.
+#   - macOS: requires the Apple SDK/CGO — only buildable on a macOS
+#     runner. Produces an ad-hoc signed (unsigned) .app bundle.
+#
+# Heavy macOS minutes are only spent on main pushes, version tags, and
+# manual dispatch; PRs run the fast test + Linux build only.
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WAILS3_VERSION: v3.0.0-beta.20
+
+jobs:
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Linux native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+  build-linux:
+    name: Build Linux (deb/rpm)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
+
+      - name: Install pinned wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS3_VERSION }}
+
+      - name: Build
+        run: wails3 task build
+
+      - name: Package deb
+        run: wails3 task linux:create:deb
+
+      - name: Package rpm
+        run: wails3 task linux:create:rpm
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvaslms-gui-linux
+          path: |
+            bin/canvaslms-gui
+            bin/*.deb
+            bin/*.rpm
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows (cross-compile)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pinned wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS3_VERSION }}
+
+      - name: Build exe (CGO_ENABLED=0 cross-compile)
+        run: wails3 task build GOOS=windows
+
+      # NSIS packaging from a Linux runner is an untested path; the .exe is
+      # the primary deliverable. First CI run will tell us if makensis works.
+      - name: Package NSIS installer (experimental)
+        continue-on-error: true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+          wails3 task package GOOS=windows
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvaslms-gui-windows
+          path: |
+            bin/canvaslms-gui.exe
+            bin/*.exe-installer*
+            bin/*installer*
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS (.app)
+    # Requires the Apple SDK/CGO — cannot run on a Linux runner.
+    runs-on: macos-14
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pinned wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS3_VERSION }}
+
+      - name: Build and package universal .app (arm64 + amd64, ad-hoc signed)
+        # package:universal builds both architectures and lipo-merges them
+        # into a single binary before creating the .app bundle.
+        run: wails3 task package:universal
+
+      - name: Zip .app bundle (preserves exec permissions)
+        run: |
+          cd bin
+          zip -r -y canvaslms-gui-darwin-universal.app.zip canvaslms-gui.app
+          rm -rf canvaslms-gui.app
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvaslms-gui-macos
+          path: |
+            bin/canvaslms-gui
+            bin/canvaslms-gui-darwin-universal.app.zip
+          if-no-files-found: error

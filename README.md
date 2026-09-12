@@ -101,6 +101,19 @@ go test -race ./internal/...
 
 Frontend and desktop behavior (dialogs, event delivery, window lifecycle) is validated with real desktop smoke checks; browser-only Vite preview is not sufficient proof of native integration.
 
+## CI
+
+`.github/workflows/build.yml` builds deployable artifacts on every push to `main`, version tag, or manual dispatch:
+
+| Job | Runner | Output |
+| --- | --- | --- |
+| Test | `ubuntu-24.04` | `go vet` + `go test -race` |
+| Linux | `ubuntu-24.04` | binary + `deb` + `rpm` (GTK4/WebKitGTK 6.0) |
+| Windows | `ubuntu-24.04` | cross-compiled `.exe` (CGO-free; GUI not validated in CI) |
+| macOS | `macos-14` | universal (arm64 + amd64) ad-hoc signed `.app` zip |
+
+macOS requires a macOS runner (the Apple SDK cannot exist on Linux); Windows cross-compiles with `CGO_ENABLED=0` per the pinned v3 Taskfile. Artifacts are downloadable from the workflow run page for manual smoke testing on each OS.
+
 ## Tech stack
 
 - **Backend:** Go and Wails v3 (v3.0.0-beta.20)
