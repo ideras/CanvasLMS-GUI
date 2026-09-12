@@ -1,5 +1,5 @@
 <script>
-  import { SaveCourseSet } from '../../wailsjs/go/main/App.js'
+  import { SaveCourseSet } from '../../bindings/canvaslms-gui/app.js'
 
   export let courses = []
   export let courseSet = []

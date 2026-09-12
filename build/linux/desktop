@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=CanvasLMS GUI
+Comment=Desktop GUI for Canvas LMS management
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/canvaslms-gui %u
+Terminal=false
+Type=Application
+Icon=canvaslms-gui
+Categories=Utility;
+StartupWMClass=canvaslms-gui
+
+ 

@@ -1,5 +1,6 @@
 <script>
-  import { UploadGrades, CancelUpload, BrowseCSVFile } from '../../wailsjs/go/main/App.js'
+  import { UploadGrades, CancelUpload, BrowseCSVFile } from '../../bindings/canvaslms-gui/app.js'
+  import { Events } from '@wailsio/runtime'
 
   export let course
   export let assignment
@@ -26,34 +27,32 @@
     step = 'file'
   }
 
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount } from 'svelte'
 
   onMount(() => {
-    window.runtime.EventsOn('upload:file_start', (p) => {
-        fileProgress = { done: 0, total: p.total, students: p.students, student: '', file: '' }
-    })
-    window.runtime.EventsOn('upload:file_progress', (p) => {
-        fileProgress = { done: p.done, total: p.total, student: p.student, file: p.file }
-    })
-    window.runtime.EventsOn('upload:status', (e) => {
-      statusMsg = e.message
-    })
-    window.runtime.EventsOn('upload:batch_progress', (p) => {
-      batchProgress = p
-    })
-    window.runtime.EventsOn('upload:error', (e) => {
-      error = e.error
-    })
-    window.runtime.EventsOn('upload:done', () => {
-      step = 'done'
-    })
-  })
-
-  onDestroy(() => {
-    window.runtime.EventsOff(
-      'upload:file_start', 'upload:status', 'upload:file_progress',
-      'upload:batch_progress', 'upload:error', 'upload:done'
-    )
+    // Store unsubscribe functions: Events.Off(name) would remove ALL listeners
+    // for the event, including the root app's upload:done/upload:error handlers.
+    const unsubs = [
+      Events.On('upload:file_start', (p) => {
+        fileProgress = { done: 0, total: p.data.total, students: p.data.students, student: '', file: '' }
+      }),
+      Events.On('upload:file_progress', (p) => {
+        fileProgress = { done: p.data.done, total: p.data.total, student: p.data.student, file: p.data.file }
+      }),
+      Events.On('upload:status', (e) => {
+        statusMsg = e.data.message
+      }),
+      Events.On('upload:batch_progress', (p) => {
+        batchProgress = p.data
+      }),
+      Events.On('upload:error', (e) => {
+        error = e.data.error
+      }),
+      Events.On('upload:done', () => {
+        step = 'done'
+      }),
+    ]
+    return () => unsubs.forEach((off) => off())
   })
 
   async function browseForFile() {

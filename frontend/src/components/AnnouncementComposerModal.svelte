@@ -2,7 +2,7 @@
   import { createEventDispatcher, onMount } from 'svelte'
   import { fly } from 'svelte/transition'
   import RichTextEditor from './RichTextEditor.svelte'
-  import { CreateAnnouncement, UpdateAnnouncement, UploadAnnouncementAttachment } from '../../wailsjs/go/main/App.js'
+  import { CreateAnnouncement, UpdateAnnouncement, UploadAnnouncementAttachment } from '../../bindings/canvaslms-gui/app.js'
   import { toasts } from 'svelte-toasts'
 
   export let course

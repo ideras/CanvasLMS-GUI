@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=canvaslms-gui
+Exec=canvaslms-gui
+Icon=canvaslms-gui
+Categories=Development;
+Terminal=false
+Keywords=wails
+Version=1.0
+StartupNotify=false

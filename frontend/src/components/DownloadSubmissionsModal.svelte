@@ -1,6 +1,7 @@
 <script>
-  import { BrowseDirectory, ExportAssignmentSubmissions } from '../../wailsjs/go/main/App.js'
-  import { onMount, onDestroy } from 'svelte'
+  import { BrowseDirectory, ExportAssignmentSubmissions } from '../../bindings/canvaslms-gui/app.js'
+  import { Events } from '@wailsio/runtime'
+  import { onMount } from 'svelte'
   import { toasts } from 'svelte-toasts'
 
   export let course
@@ -30,25 +31,24 @@
   }
 
   onMount(() => {
-    window.runtime.EventsOn('assign-dl:start', () => {
-      state = 'downloading'
-      progress = { current: 0, total: 0, student: '' }
-    })
-    window.runtime.EventsOn('assign-dl:progress', (p) => {
-      progress = p
-    })
-    window.runtime.EventsOn('assign-dl:done', (d) => {
-      state = 'done'
-      resultMsg = d.message
-    })
-    window.runtime.EventsOn('assign-dl:error', (e) => {
-      state = 'error'
-      errorMsg = e.error || 'Download failed'
-    })
-  })
-
-  onDestroy(() => {
-    window.runtime.EventsOff('assign-dl:start', 'assign-dl:progress', 'assign-dl:done', 'assign-dl:error')
+    const unsubs = [
+      Events.On('assign-dl:start', () => {
+        state = 'downloading'
+        progress = { current: 0, total: 0, student: '' }
+      }),
+      Events.On('assign-dl:progress', (p) => {
+        progress = p.data
+      }),
+      Events.On('assign-dl:done', (d) => {
+        state = 'done'
+        resultMsg = d.data.message
+      }),
+      Events.On('assign-dl:error', (e) => {
+        state = 'error'
+        errorMsg = e.data.error || 'Download failed'
+      }),
+    ]
+    return () => unsubs.forEach((off) => off())
   })
 
   $: pct = progress.total > 0 ? (progress.current / progress.total) * 100 : 0

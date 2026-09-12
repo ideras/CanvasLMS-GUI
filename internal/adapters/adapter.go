@@ -2,19 +2,20 @@ package adapters
 
 import (
 	"canvaslms-gui/internal/grades"
-	"context"
-	markdown "github.com/ideras/md-to-pdf"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
+
+	markdown "github.com/ideras/md-to-pdf"
 )
 
-// wailsEmitter adapts Wails runtime events to the grades.EventEmitter interface.
-type wailsEmitter struct {
-	ctx context.Context
-}
+// wailsEmitter forwards event emissions to the Wails v3 application event
+// bus, preserving the v2 event contract (name + map payload).
+type wailsEmitter struct{}
 
 func (e *wailsEmitter) Emit(event string, data map[string]any) {
-	runtime.EventsEmit(e.ctx, event, data)
+	if app := application.Get(); app != nil {
+		app.Event.Emit(event, data)
+	}
 }
 
 // mdConverter adapts the markdown converter to the grades.MarkdownConverter interface.
@@ -24,8 +25,11 @@ func (c *mdConverter) ConvertFile(inputPath, outputPath string) error {
 	return markdown.ConvertFile(inputPath, outputPath)
 }
 
-func NewWailsEmitter(ctx context.Context) grades.EventEmitter {
-	return &wailsEmitter{ctx: ctx}
+// NewWailsEmitter returns a grades.EventEmitter backed by the Wails v3
+// application event bus. Emissions are dropped when the application has not
+// been created (e.g. unit tests without a desktop runtime).
+func NewWailsEmitter() grades.EventEmitter {
+	return &wailsEmitter{}
 }
 
 func NewMarkdownConverter() grades.MarkdownConverter {

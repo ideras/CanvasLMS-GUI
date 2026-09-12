@@ -5,31 +5,33 @@ import (
 	"canvaslms-gui/internal/api"
 	"canvaslms-gui/internal/grades"
 	"context"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-func UploadGrades(appCtx context.Context, client api.CanvasClient, courseID int, assignmentID int, csvPath string) context.CancelFunc {
+// UploadGrades runs the full grade upload workflow in the background. All
+// progress/error reporting goes through the provided emitter so this package
+// stays free of transport (Wails) coupling. Returns the cancel function and a
+// channel closed when the background work finishes (for bounded shutdown waits).
+func UploadGrades(appCtx context.Context, client api.CanvasClient, emitter grades.EventEmitter, courseID int, assignmentID int, csvPath string) (context.CancelFunc, <-chan struct{}) {
 	ctx, cancel := context.WithCancel(appCtx)
-
-	emitter := adapters.NewWailsEmitter(ctx)
+	done := make(chan struct{})
 
 	go func() {
 		defer cancel()
+		defer close(done)
 
 		// Load CSV
 		loader := grades.NewLoader(csvPath, "")
 		result, err := loader.Load()
 		if err != nil {
-			runtime.EventsEmit(ctx, "upload:error", map[string]any{"error": err.Error()})
+			emitter.Emit("upload:error", map[string]any{"error": err.Error()})
 			return
 		}
 
 		// Convert MD files if present
 		if result.HasMD {
-			runtime.EventsEmit(ctx, "upload:status", map[string]any{"message": "Converting Markdown files to PDF..."})
+			emitter.Emit("upload:status", map[string]any{"message": "Converting Markdown files to PDF..."})
 			if err := loader.ConvertMarkdownFiles(result, adapters.NewMarkdownConverter()); err != nil {
-				runtime.EventsEmit(ctx, "upload:error", map[string]any{"error": err.Error()})
+				emitter.Emit("upload:error", map[string]any{"error": err.Error()})
 				return
 			}
 		}
@@ -37,10 +39,10 @@ func UploadGrades(appCtx context.Context, client api.CanvasClient, courseID int,
 		// Run upload
 		uploader := grades.NewUploader(client, emitter)
 		if err := uploader.UploadGrades(ctx, courseID, assignmentID, "", result); err != nil {
-			runtime.EventsEmit(ctx, "upload:error", map[string]any{"error": err.Error()})
+			emitter.Emit("upload:error", map[string]any{"error": err.Error()})
 			return
 		}
 	}()
 
-	return cancel
+	return cancel, done
 }

@@ -5,7 +5,8 @@
   import UploadWizard from './components/UploadWizard.svelte'
   import SettingsModal from './components/SettingsModal.svelte'
   import { ToastContainer, FlatToast, toasts } from 'svelte-toasts'
-  import { ListCourses, SelectCourse, GetConfig, GetCurrentCourse, NeedsSetup } from '../wailsjs/go/main/App.js'
+  import { Events } from '@wailsio/runtime'
+  import { ListCourses, SelectCourse, GetConfig, GetCurrentCourse, NeedsSetup } from '../bindings/canvaslms-gui/app.js'
 
   let view = 'home'
   let currentCourse = null
@@ -66,18 +67,30 @@
   }
 
   import { onMount } from 'svelte'
-  onMount(async () => {
-    window.runtime.EventsOn('app:error', (e) => {
-      toasts.error(e.message)
+  onMount(() => {
+    // Root listeners live for the application lifetime; store unsubscribe
+    // functions so component teardown cannot clobber other listeners.
+    const unsubAppError = Events.On('app:error', (e) => {
+      toasts.error(e.data.message)
     })
-    window.runtime.EventsOn('upload:done', () => {
+    const unsubUploadDone = Events.On('upload:done', () => {
       toasts.success('Grades uploaded successfully')
       showUploadWizard = false
     })
-    window.runtime.EventsOn('upload:error', (e) => {
-      toasts.error(e.error || 'Upload failed')
+    const unsubUploadError = Events.On('upload:error', (e) => {
+      toasts.error(e.data.error || 'Upload failed')
     })
 
+    startApp()
+
+    return () => {
+      unsubAppError()
+      unsubUploadDone()
+      unsubUploadError()
+    }
+  })
+
+  async function startApp() {
     // Check whether a token is configured; if not, open settings first.
     try {
       const needsSetup = await NeedsSetup()
@@ -89,7 +102,7 @@
     } catch (_) { /* ignore */ }
 
     await initApp()
-  })
+  }
 </script>
 
 <!-- Menu Bar -->

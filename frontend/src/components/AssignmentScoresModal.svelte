@@ -1,5 +1,5 @@
 <script>
-  import { ListSubmissions } from '../../wailsjs/go/main/App.js'
+  import { ListSubmissions } from '../../bindings/canvaslms-gui/app.js'
   import { onMount } from 'svelte'
   import { toasts } from 'svelte-toasts'
 

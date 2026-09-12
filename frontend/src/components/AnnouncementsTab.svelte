@@ -1,6 +1,6 @@
 <script>
-  import { DeleteAnnouncement, GetAnnouncements, DownloadAnnouncementFile } from '../../wailsjs/go/main/App.js'
-  import { BrowserOpenURL } from '../../wailsjs/runtime/runtime.js'
+  import { DeleteAnnouncement, GetAnnouncements, DownloadAnnouncementFile } from '../../bindings/canvaslms-gui/app.js'
+  import { Browser } from '@wailsio/runtime'
   import { toasts } from 'svelte-toasts'
   import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
@@ -57,7 +57,9 @@
       downloadFile(dl, name)
       return
     }
-    BrowserOpenURL(href)
+    Browser.OpenURL(href).catch((err) => {
+      toasts.error(err?.message || 'Could not open the link in the system browser')
+    })
   }
 
   async function downloadFile(url, name) {
