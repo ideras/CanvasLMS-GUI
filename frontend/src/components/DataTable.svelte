@@ -23,7 +23,9 @@
     rowSortingFeature,
     createSortedRowModel,
     sortFns,
-    renderSnippet
+    renderSnippet,
+    columnSizingFeature,
+    columnResizingFeature
   } from '@tanstack/svelte-table'
 
   let {
@@ -36,7 +38,8 @@
     loading = false,
     emptyMessage = 'No data.',
     tableClass = '',
-    rowClass = null         // fn(row.original) -> extra <tr> class(es)
+    rowClass = null,        // fn(row.original) -> extra <tr> class(es)
+    resizable = true        // column resize handles; columns opt out via enableResizing: false
   } = $props()
 
   // Columns flagged `snippet: true` get their cell content from the `cells`
@@ -48,7 +51,9 @@
   const features = tableFeatures({
     rowSortingFeature,
     sortedRowModel: createSortedRowModel(),
-    sortFns
+    sortFns,
+    columnSizingFeature,
+    columnResizingFeature
   })
 
   function resolveGetRowId(rk) {
@@ -82,15 +87,60 @@
       return data
     },
     initialState: { sorting: initialSorting },
-    getRowId: resolveGetRowId(rowKey)
+    getRowId: resolveGetRowId(rowKey),
+    columnResizeMode: 'onChange',
+    defaultColumn: { minSize: 60 }
   })
+
+  let theadEl
+  let userResized = $state(false)
+  let seeded = false
+  let seededSizes = {}
+
+  // TanStack's resize math is relative to its LOGICAL column sizes (default
+  // 150px), not the browser's auto-layout widths. Seed the logical sizes
+  // from the rendered layout once, right after mount, so any later drag
+  // delta is relative to what the user actually sees. Widths stay fluid
+  // (no explicit px) until the user actually drags a handle.
+  $effect(() => {
+    if (seeded || userResized || !theadEl?.rows?.[0]) return
+    seeded = true
+    const headers = table.getHeaderGroups()[0]?.headers ?? []
+    const sizes = {}
+    headers.forEach((h, i) => {
+      const w = theadEl.rows[0].cells[i]?.getBoundingClientRect?.().width
+      if (w) sizes[h.column.id] = Math.round(w * 100) / 100
+    })
+    seededSizes = sizes
+    if (Object.keys(sizes).length) table.setColumnSizing((old) => ({ ...old, ...sizes }))
+  })
+
+  // dblclick reset returns the column to its seeded (as-rendered) width,
+  // not TanStack's 150px default.
+  function resetColumn(column) {
+    const seeded = seededSizes[column.id]
+    if (seeded != null) table.setColumnSizing((old) => ({ ...old, [column.id]: seeded }))
+    else column.resetSize()
+  }
+
+  // Explicit widths kick in only once the user has dragged a handle; until
+  // then the table keeps its browser auto-layout.
+  function userWidth(column) {
+    if (!userResized) return ''
+    return `width: ${column.getSize()}px`
+  }
+
+  function beginResize(event, header) {
+    userResized = true
+    header.getResizeHandler()(event)
+  }
 
   let rows = $derived(table.getRowModel().rows)
   let columnCount = $derived(table.getAllLeafColumns().length)
 </script>
 
-<table class={tableClass}>
-  <thead>
+<table class={tableClass} style={userResized ? 'table-layout: fixed; width: 100%' : ''}>
+  <thead bind:this={theadEl}>
     {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
       <tr>
         {#each headerGroup.headers as header (header.id)}
@@ -99,6 +149,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <th
             class={[canSort ? 'sortable-th' : '', header.column.columnDef.meta?.headerClass ?? '']}
+            style={userWidth(header.column)}
             onclick={canSort ? (event) => toggleSort(event, header) : undefined}
           >
             {#if !header.isPlaceholder}
@@ -110,6 +161,19 @@
                   <span class="sort-indicator">▼</span>
                 {/if}
               {/if}
+            {/if}
+            {#if resizable && header.column.getCanResize()}
+              <!-- stopPropagation on click: the resizer must not trigger the
+                   th's sort toggle; dblclick resets the column size -->
+              <div
+                class="col-resizer"
+                class:resizing={header.column.getIsResizing()}
+                title="Drag to resize · double-click to reset"
+                onmousedown={(e) => beginResize(e, header)}
+                ontouchstart={(e) => beginResize(e, header)}
+                ondblclick={() => resetColumn(header.column)}
+                onclick={(e) => e.stopPropagation()}
+              ></div>
             {/if}
           </th>
         {/each}
@@ -129,7 +193,7 @@
       {#each rows as row (row.id)}
         <tr class={rowClass ? rowClass(row.original) : ''}>
           {#each row.getAllCells() as cell (cell.id)}
-            <td class={cell.column.columnDef.meta?.cellClass ?? ''}>
+            <td class={cell.column.columnDef.meta?.cellClass ?? ''} style={userWidth(cell.column)}>
               <FlexRender cell={cell} />
             </td>
           {/each}
@@ -140,6 +204,27 @@
 </table>
 
 <style>
+  th {
+    position: relative;
+  }
+
+  .col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 9px;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    z-index: 2;
+  }
+
+  .col-resizer.resizing {
+    background: var(--frost-blue);
+    opacity: 0.35;
+  }
+
   .sortable-th {
     cursor: pointer;
     user-select: none;
