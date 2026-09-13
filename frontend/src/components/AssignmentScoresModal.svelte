@@ -1,7 +1,7 @@
 <script>
   import { ListSubmissions } from '../../bindings/canvaslms-gui/app.js'
   import { onMount } from 'svelte'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   export let assignment   // full Assignment object
@@ -21,7 +21,7 @@
     try {
       submissions = await ListSubmissions(course.id, assignment.id)
     } catch (e) {
-      toasts.error(e.message || 'Failed to load submissions')
+      toast.error(e.message || 'Failed to load submissions')
     } finally {
       loading = false
     }

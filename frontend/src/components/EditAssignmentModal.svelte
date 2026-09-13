@@ -1,6 +1,6 @@
 <script>
   import { EditAssignment, GetAssignmentGroups, CreateAssignmentGroup } from '../../bindings/canvaslms-gui/app.js'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   export let assignment   // the existing assignment to edit
@@ -67,10 +67,10 @@
       if (groupID > 0)         payload.assignment_group_id = groupID
 
       await EditAssignment(course.id, assignment.id, { assignment: payload })
-      toasts.success('Assignment updated')
+      toast.success('Assignment updated')
       onClose()
     } catch (e) {
-      toasts.error(e.message || e.error || 'Failed to update assignment')
+      toast.error(e.message || e.error || 'Failed to update assignment')
     } finally {
       saving = false
     }

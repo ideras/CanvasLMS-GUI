@@ -1,6 +1,6 @@
 <script>
   import { CreateAssignment, GetAssignmentGroups, CreateAssignmentGroup } from '../../bindings/canvaslms-gui/app.js'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   export let onClose
@@ -57,10 +57,10 @@
       if (groupID > 0) assignment.assignment_group_id = groupID
 
       await CreateAssignment(course.id, { assignment })
-      toasts.success('Assignment created')
+      toast.success('Assignment created')
       onClose()
     } catch (e) {
-      toasts.error(e.message || e.error || 'Failed to create assignment')
+      toast.error(e.message || e.error || 'Failed to create assignment')
     } finally {
       creating = false
     }

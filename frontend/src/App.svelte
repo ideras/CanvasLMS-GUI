@@ -4,7 +4,7 @@
   import CourseView from './components/CourseView.svelte'
   import UploadWizard from './components/UploadWizard.svelte'
   import SettingsModal from './components/SettingsModal.svelte'
-  import { ToastContainer, FlatToast, toasts } from 'svelte-toasts'
+  import { Toaster, toast } from 'svelte-sonner'
   import { Events } from '@wailsio/runtime'
   import { ListCourses, SelectCourse, GetConfig, GetCurrentCourse, NeedsSetup } from '../bindings/canvaslms-gui/app.js'
 
@@ -22,7 +22,7 @@
     try {
       courses = await ListCourses()
     } catch (e) {
-      toasts.error(e.message || 'Failed to load courses')
+      toast.error(e.message || 'Failed to load courses')
     }
   }
 
@@ -71,14 +71,14 @@
     // Root listeners live for the application lifetime; store unsubscribe
     // functions so component teardown cannot clobber other listeners.
     const unsubAppError = Events.On('app:error', (e) => {
-      toasts.error(e.data.message)
+      toast.error(e.data.message)
     })
     const unsubUploadDone = Events.On('upload:done', () => {
-      toasts.success('Grades uploaded successfully')
+      toast.success('Grades uploaded successfully')
       showUploadWizard = false
     })
     const unsubUploadError = Events.On('upload:error', (e) => {
-      toasts.error(e.data.error || 'Upload failed')
+      toast.error(e.data.error || 'Upload failed')
     })
 
     startApp()
@@ -179,9 +179,7 @@
   />
 {/if}
 
-<ToastContainer theme="dark" placement="top-right" duration="{4000}" let:data="{data}">
-  <FlatToast {data} />
-</ToastContainer>
+<Toaster theme="dark" position="top-right" duration={4000} richColors closeButton />
 
 <style>
   header {

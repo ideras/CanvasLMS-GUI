@@ -1,6 +1,6 @@
 <script>
   import { GetStudentSubmissions, ExportStudentsCSV } from '../../bindings/canvaslms-gui/app.js'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   export let students
@@ -37,10 +37,10 @@
     try {
       const path = await ExportStudentsCSV(course.id)
       if (path) {
-        toasts.success('Student list saved: ' + path.split('/').pop())
+        toast.success('Student list saved: ' + path.split('/').pop())
       }
     } catch (e) {
-      toasts.error(e.message || 'Download failed')
+      toast.error(e.message || 'Download failed')
     }
   }
 </script>

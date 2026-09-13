@@ -2,7 +2,7 @@
   import { BrowseDirectory, ExportAssignmentSubmissions } from '../../bindings/canvaslms-gui/app.js'
   import { Events } from '@wailsio/runtime'
   import { onMount } from 'svelte'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   export let assignment   // full Assignment object
@@ -19,7 +19,7 @@
       const dir = await BrowseDirectory()
       if (dir) selectedDir = dir
     } catch (e) {
-      toasts.error(e.message || 'Could not open folder picker')
+      toast.error(e.message || 'Could not open folder picker')
     }
   }
 
