@@ -122,7 +122,7 @@
               {/if}
             </div>
           </div>
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div class="card-body" on:click={handleLinkClick}>
             {@html ann.message}
           </div>
