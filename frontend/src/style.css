@@ -115,6 +115,71 @@ tr:hover td {
   background: #f8fafe;
 }
 
+/* Shared table-cell classes used via DataTable.svelte columnDef.meta.cellClass.
+   Must be global: cells render inside DataTable.svelte, so component-scoped
+   styles cannot target them. */
+.id-cell {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.name-cell {
+  font-weight: 500;
+}
+
+.num-col {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.date-cell {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Compact table variant (AssignmentScoresModal): sticky header, denser rows.
+   Applied via DataTable's tableClass prop. */
+.compact-table {
+  font-size: 13px;
+}
+
+.compact-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-primary);
+  padding: 8px 12px;
+  z-index: 1;
+}
+
+.compact-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.compact-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.compact-table tbody tr:hover td {
+  background: var(--bg-primary);
+}
+
+.compact-table tbody tr.late-row td {
+  background: #fffbf0;
+}
+
+.compact-table td {
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
