@@ -156,6 +156,8 @@ tr:hover td {
   top: 0;
   background: var(--bg-primary);
   padding: 8px 12px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
   z-index: 1;
 }
 
