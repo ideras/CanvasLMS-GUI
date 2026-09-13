@@ -109,6 +109,7 @@
     {
       accessorKey: 'points',
       header: 'Points',
+      meta: { cellClass: 'num-col', headerClass: 'num-col' },
       sortFn: numericSortFn,
       cell: ({ row }) => formatPoints(row.original.points)
     },
