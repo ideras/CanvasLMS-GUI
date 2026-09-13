@@ -1,7 +1,7 @@
 <script>
   import { DeleteAnnouncement, GetAnnouncements, DownloadAnnouncementFile } from '../../bindings/canvaslms-gui/app.js'
   import { Browser } from '@wailsio/runtime'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
   import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
   import AnnouncementComposerModal from './AnnouncementComposerModal.svelte'
@@ -36,10 +36,10 @@
     if (!confirm(`Delete "${ann.title}"?`)) return
     try {
       await DeleteAnnouncement(course.id, ann.id)
-      toasts.success('Announcement deleted')
+      toast.success('Announcement deleted')
       await loadAnnouncements()
     } catch (e) {
-      toasts.error(e.message || 'Failed to delete announcement')
+      toast.error(e.message || 'Failed to delete announcement')
     }
   }
 
@@ -58,7 +58,7 @@
       return
     }
     Browser.OpenURL(href).catch((err) => {
-      toasts.error(err?.message || 'Could not open the link in the system browser')
+      toast.error(err?.message || 'Could not open the link in the system browser')
     })
   }
 
@@ -66,7 +66,7 @@
     try {
       await DownloadAnnouncementFile(url, name)
     } catch (e) {
-      toasts.error(e.message || 'Download failed')
+      toast.error(e.message || 'Download failed')
     }
   }
 

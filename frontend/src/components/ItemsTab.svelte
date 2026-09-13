@@ -1,7 +1,7 @@
 <script>
   import { ExportQuizQuestions, ExportQuizSubmissions } from '../../bindings/canvaslms-gui/app.js'
   import { Events } from '@wailsio/runtime'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
   import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
   import iconUpload from '../assets/images/icon-upload.svg'
@@ -36,12 +36,12 @@
         submissionsProgress = { current: d.data.total, total: d.data.total, done: true }
         setTimeout(() => {
           submissionsProgress = null
-          toasts.success(d.data.message)
+          toast.success(d.data.message)
         }, 1200)
       }),
       Events.On('submissions:error', (e) => {
         submissionsProgress = null
-        toasts.error(e.data.error || 'Download failed')
+        toast.error(e.data.error || 'Download failed')
       }),
     ]
     return () => unsubs.forEach((off) => off())
@@ -69,10 +69,10 @@
     try {
       const path = await ExportQuizQuestions(course.id, item.id, item.name, 'md')
       if (path) {
-        toasts.success('Questions saved: ' + path.split('/').pop())
+        toast.success('Questions saved: ' + path.split('/').pop())
       }
     } catch (e) {
-      toasts.error(e.message || 'Download failed')
+      toast.error(e.message || 'Download failed')
     }
   }
 

@@ -1,6 +1,6 @@
 <script>
   import { ExportScoresCSV } from '../../bindings/canvaslms-gui/app.js'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   export let stats
@@ -11,9 +11,9 @@
     exporting = true
     try {
       const path = await ExportScoresCSV(course.id)
-      if (path) toasts.success('Scores saved: ' + path.split('/').pop())
+      if (path) toast.success('Scores saved: ' + path.split('/').pop())
     } catch (e) {
-      toasts.error(e.message || 'Failed to export scores')
+      toast.error(e.message || 'Failed to export scores')
     } finally {
       exporting = false
     }

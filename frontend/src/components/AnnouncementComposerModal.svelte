@@ -3,7 +3,7 @@
   import { fly } from 'svelte/transition'
   import RichTextEditor from './RichTextEditor.svelte'
   import { CreateAnnouncement, UpdateAnnouncement, UploadAnnouncementAttachment } from '../../bindings/canvaslms-gui/app.js'
-  import { toasts } from 'svelte-toasts'
+  import { toast } from 'svelte-sonner'
 
   export let course
   /** Pass null for create mode, or an Announcement object for edit mode. */
@@ -45,10 +45,10 @@
       const info = await UploadAnnouncementAttachment(course.id)
       if (info && editorRef) {
         editorRef.appendHTML(`<p><a href="${info.download_url}">📎 ${info.name}</a></p>`)
-        toasts.success('File attached: ' + info.name)
+        toast.success('File attached: ' + info.name)
       }
     } catch (e) {
-      toasts.error(e.message || 'Failed to attach file')
+      toast.error(e.message || 'Failed to attach file')
     } finally {
       attaching = false
     }
@@ -56,7 +56,7 @@
 
   async function save() {
     if (!title.trim()) {
-      toasts.error('Title is required')
+      toast.error('Title is required')
       return
     }
     const message = editorRef?.getHTML() ?? ''
@@ -64,14 +64,14 @@
     try {
       if (isEdit) {
         await UpdateAnnouncement(course.id, announcement.id, title, message)
-        toasts.success('Announcement updated')
+        toast.success('Announcement updated')
       } else {
         await CreateAnnouncement(course.id, title, message)
-        toasts.success('Announcement created')
+        toast.success('Announcement created')
       }
       dispatch('saved')
     } catch (e) {
-      toasts.error(e.message || 'Failed to save announcement')
+      toast.error(e.message || 'Failed to save announcement')
     } finally {
       saving = false
     }
