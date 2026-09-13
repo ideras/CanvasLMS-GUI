@@ -8,6 +8,7 @@
   --text-primary: #2c3e50;
   --text-secondary: #5d6d7e;
   --border-color: #dce6f0;
+  --table-line: #b9c9da;   /* table row separators — darker than --border-color so horizontal lines stay visible on scaled displays */
   --success: #27ae60;
   --danger: #e74c3c;
   --warning: #f39c12;
@@ -99,7 +100,7 @@ table {
 th, td {
   text-align: left;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--table-line);
 }
 
 th {
@@ -162,7 +163,7 @@ tr:hover td {
 }
 
 .compact-table tbody tr {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--table-line);
 }
 
 .compact-table tbody tr:last-child {
