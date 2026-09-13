@@ -123,7 +123,7 @@
     {
       accessorKey: 'score',
       header: 'Score',
-      meta: { cellClass: 'num-col' },
+      meta: { cellClass: 'num-col', headerClass: 'num-col' },
       sortFn: scoreSortFn,
       cell: ({ row }) => fmtScore(row.original.score, row.original.grade)
     },

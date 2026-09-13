@@ -98,7 +98,7 @@
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <th
-            class={canSort ? 'sortable-th' : ''}
+            class={[canSort ? 'sortable-th' : '', header.column.columnDef.meta?.headerClass ?? '']}
             onclick={canSort ? (event) => toggleSort(event, header) : undefined}
           >
             {#if !header.isPlaceholder}
