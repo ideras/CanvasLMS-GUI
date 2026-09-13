@@ -70,7 +70,13 @@
   <p class="export-hint">One row per student · one column per assignment and quiz</p>
 </div>
 
+<!-- InfoTab deliberately NOT migrated to DataTable (handoff §5): a static
+     4-row key/value list has no dynamic row model, no headers, no sorting —
+     a plain <table> is more honest here. -->
+
 <style>
+  /* .id-cell now global in style.css; kept here only as the InfoTab alias
+     (same rules) until this component's styles are consolidated. */
   .id-cell {
     font-family: monospace;
     font-size: 12px;

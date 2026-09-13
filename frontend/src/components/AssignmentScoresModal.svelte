@@ -78,6 +78,11 @@
   }
 
   function statusLabel(sub) {
+    // TanStack's auto-sort-direction probe calls accessorFn with a synthetic
+    // row whose `original` is undefined — must not throw (a throw here would
+    // abort the delegated event walk and fall through to the overlay's
+    // onClose, closing the dialog).
+    if (!sub) return { text: 'Not submitted', cls: 'none' }
     if (sub.excused)                      return { text: 'Excused',     cls: 'excused'   }
     if (sub.missing)                      return { text: 'Missing',     cls: 'missing'   }
     if (sub.workflow_state === 'graded')  return { text: 'Graded',      cls: 'graded'    }
@@ -86,21 +91,56 @@
     return                                       { text: 'Not submitted', cls: 'none'    }
   }
 
-  // Sort: graded first (by score desc), then submitted, then not submitted
-  $: sortedRows = (() => {
-    const withName = submissions.map(s => ({
-      ...s,
-      _name: studentsByID[s.user_id]?.name ?? `User ${s.user_id}`,
-    }))
-    return [...withName].sort((a, b) => {
-      const aScore = typeof a.score === 'number' ? a.score : parseFloat(a.score)
-      const bScore = typeof b.score === 'number' ? b.score : parseFloat(b.score)
-      if (!isNaN(aScore) && !isNaN(bScore)) return bScore - aScore
-      if (!isNaN(aScore)) return -1
-      if (!isNaN(bScore)) return  1
-      return a._name.localeCompare(b._name)
-    })
-  })()
+  // ---- Table (DataTable / TanStack) ----
+  import DataTable from './DataTable.svelte'
+
+  // Mirrors the previous hand-rolled comparator: numeric score,
+  // unscored always last (null maps to -Infinity so the direction
+  // multiplier of asc/desc toggling never floats them to the top).
+  function scoreSortFn(rowA, rowB, columnId) {
+    const toNum = (v) => {
+      const n = typeof v === 'number' ? v : parseFloat(v)
+      return isNaN(n) ? -Infinity : n
+    }
+    return toNum(rowA.getValue(columnId)) - toNum(rowB.getValue(columnId))
+  }
+
+  const STATUS_ORDER = ['Graded', 'Submitted', 'Excused', 'Missing', 'Not submitted']
+  function statusSortFn(rowA, rowB) {
+    return (
+      STATUS_ORDER.indexOf(statusLabel(rowA.original).text) -
+      STATUS_ORDER.indexOf(statusLabel(rowB.original).text)
+    )
+  }
+
+  const scoreColumns = [
+    {
+      id: 'student',
+      header: 'Student',
+      accessorFn: (row) => studentsByID[row.user_id]?.name ?? `User ${row.user_id}`,
+      meta: { cellClass: 'name-cell' }
+    },
+    {
+      accessorKey: 'score',
+      header: 'Score',
+      meta: { cellClass: 'num-col', headerClass: 'num-col' },
+      sortFn: scoreSortFn,
+      cell: ({ row }) => fmtScore(row.original.score, row.original.grade)
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      accessorFn: (row) => statusLabel(row.original).text,
+      sortFn: statusSortFn,
+      snippet: true
+    },
+    {
+      accessorKey: 'submitted_at',
+      header: 'Submitted',
+      meta: { cellClass: 'date-cell' },
+      cell: ({ row }) => fmtDate(row.original.submitted_at)
+    }
+  ]
 </script>
 
 <div class="modal-overlay" on:click={onClose}>
@@ -162,38 +202,29 @@
       </div>
 
       <!-- Scores table -->
-      {#if sortedRows.length === 0}
-        <p class="status">No submissions found.</p>
-      {:else}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th class="num-col">Score</th>
-                <th>Status</th>
-                <th>Submitted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each sortedRows as sub (sub.user_id)}
-                {@const st = statusLabel(sub)}
-                <tr class:late-row={sub.late && !sub.missing}>
-                  <td class="name-cell">{sub._name}</td>
-                  <td class="num-col">{fmtScore(sub.score, sub.grade)}</td>
-                  <td>
-                    <span class="badge badge-{st.cls}">{st.text}</span>
-                    {#if sub.late && !sub.missing && !sub.excused}
-                      <span class="badge badge-late">Late</span>
-                    {/if}
-                  </td>
-                  <td class="date-cell">{fmtDate(sub.submitted_at)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
+      {#snippet statusCell(sub)}
+        {@const st = statusLabel(sub)}
+        <span class="badge badge-{st.cls}">{st.text}</span>
+        {#if sub.late && !sub.missing && !sub.excused}
+          <span class="badge badge-late">Late</span>
+        {/if}
+      {/snippet}
+
+      <div class="table-wrap">
+        <DataTable
+          data={submissions}
+          columns={scoreColumns}
+          cells={{ status: statusCell }}
+          rowKey="user_id"
+          tableClass="compact-table"
+          rowClass={(s) => (s.late && !s.missing ? 'late-row' : '')}
+          initialSorting={[
+            { id: 'score', desc: true },
+            { id: 'student', desc: false }
+          ]}
+          emptyMessage="No submissions found."
+        />
+      </div>
     {/if}
 
     <div class="modal-footer">
@@ -290,63 +321,9 @@
     border-radius: 8px;
   }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  thead th {
-    position: sticky;
-    top: 0;
-    background: var(--bg-primary);
-    padding: 8px 12px;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  tbody tr {
-    border-bottom: 1px solid var(--border-color);
-    transition: background 0.1s;
-  }
-
-  tbody tr:last-child {
-    border-bottom: none;
-  }
-
-  tbody tr:hover {
-    background: var(--bg-primary);
-  }
-
-  tbody tr.late-row {
-    background: #fffbf0;
-  }
-
-  td {
-    padding: 8px 12px;
-    vertical-align: middle;
-  }
-
-  .name-cell {
-    font-weight: 500;
-  }
-
-  .num-col {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
-  .date-cell {
-    color: var(--text-secondary);
-    font-size: 12px;
-    white-space: nowrap;
-  }
+  /* Table cell classes live in global CSS (style.css) — cells render
+     inside DataTable.svelte so component-scoped styles can't reach them.
+     .name-cell / .num-col / .date-cell / .compact-table rules moved there. */
 
   /* Badges */
   .badge {

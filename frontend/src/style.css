@@ -8,6 +8,7 @@
   --text-primary: #2c3e50;
   --text-secondary: #5d6d7e;
   --border-color: #dce6f0;
+  --table-line: #b9c9da;   /* table row separators — darker than --border-color so horizontal lines stay visible on scaled displays */
   --success: #27ae60;
   --danger: #e74c3c;
   --warning: #f39c12;
@@ -99,7 +100,20 @@ table {
 th, td {
   text-align: left;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--table-line);
+  border-right: 1px solid var(--table-line);
+}
+
+/* keep the table's outer edges clean: no separator on the last column */
+th:last-child,
+td:last-child {
+  border-right: none;
+}
+
+/* dense variant: reduced row height */
+.dense-table th,
+.dense-table td {
+  padding: 4px 14px;
 }
 
 th {
@@ -113,6 +127,73 @@ th {
 
 tr:hover td {
   background: #f8fafe;
+}
+
+/* Shared table-cell classes used via DataTable.svelte columnDef.meta.cellClass.
+   Must be global: cells render inside DataTable.svelte, so component-scoped
+   styles cannot target them. */
+.id-cell {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.name-cell {
+  font-weight: 500;
+}
+
+.num-col {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.date-cell {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Compact table variant (AssignmentScoresModal): sticky header, denser rows.
+   Applied via DataTable's tableClass prop. */
+.compact-table {
+  font-size: 13px;
+}
+
+.compact-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-primary);
+  padding: 8px 12px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  z-index: 1;
+}
+
+.compact-table tbody tr {
+  border-bottom: 1px solid var(--table-line);
+}
+
+.compact-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.compact-table tbody tr:hover td {
+  background: var(--bg-primary);
+}
+
+.compact-table tbody tr.late-row td {
+  background: #fffbf0;
+}
+
+.compact-table td {
+  padding: 8px 12px;
+  vertical-align: middle;
 }
 
 .modal-overlay {

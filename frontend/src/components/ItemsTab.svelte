@@ -4,6 +4,7 @@
   import { toast } from 'svelte-sonner'
   import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
+  import DataTable from './DataTable.svelte'
   import iconUpload from '../assets/images/icon-upload.svg'
   import iconQuestions from '../assets/images/icon-questions.svg'
   import iconSubmissions from '../assets/images/icon-submissions.svg'
@@ -80,6 +81,45 @@
     closeDropdown()
     ExportQuizSubmissions(course.id, item.id, format)
   }
+
+  // ---- Items table columns (DataTable / TanStack) ----
+  // Nulls map to -Infinity so unscored/undated rows stay last in desc
+  // (the default first-click direction) instead of floating to the top.
+  function numericSortFn(rowA, rowB, columnId) {
+    const toNum = (v) => {
+      const n = typeof v === 'number' ? v : parseFloat(v)
+      return isNaN(n) ? -Infinity : n
+    }
+    return toNum(rowA.getValue(columnId)) - toNum(rowB.getValue(columnId))
+  }
+
+  const itemColumns = [
+    { accessorKey: 'id', header: 'ID', meta: { cellClass: 'id-cell' } },
+    { accessorKey: 'name', header: 'Name', meta: { cellClass: 'name-cell' } },
+    {
+      accessorKey: 'type',
+      header: 'Type',
+      snippet: true
+    },
+    {
+      accessorKey: 'due_at',
+      header: 'Due Date',
+      cell: ({ row }) => formatDate(row.original.due_at)
+    },
+    {
+      accessorKey: 'points',
+      header: 'Points',
+      meta: { cellClass: 'num-col', headerClass: 'num-col' },
+      sortFn: numericSortFn,
+      cell: ({ row }) => formatPoints(row.original.points)
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      enableSorting: false,
+      snippet: true
+    }
+  ]
 </script>
 
 <div class="filter-bar">
@@ -116,117 +156,80 @@
   </div>
 {/if}
 
-{#if filteredItems.length === 0}
-  <p class="status">No items found.</p>
-{:else}
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Name</th>
-        <th>Type</th>
-        <th>Due Date</th>
-        <th>Points</th>
-        <th class="actions-cell">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each filteredItems as item (item.id + '-' + item.type)}
-        <tr>
-          <td class="id-cell">{item.id}</td>
-          <td class="name-cell">{item.name}</td>
-          <td>
-            <span class="type-badge" class:quiz={item.type === 'quiz'}>
-              {item.type === 'quiz' ? (item.is_old_quiz ? 'old-quiz' : 'new-quiz') : 'assignment'}
-            </span>
-          </td>
-          <td>{formatDate(item.due_at)}</td>
-          <td>{formatPoints(item.points)}</td>
-          <td class="actions-cell">
-            <button class="icon-btn" title="Upload Grades" on:click={() => onUpload(item)}>
-              <img src={iconUpload} alt="Upload Grades" width="20" height="20" />
-            </button>
-            {#if item.type === 'assignment' && onEdit}
-              <button class="icon-btn" title="Edit Assignment" on:click={() => onEdit(item)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-              </button>
-            {/if}
-            {#if item.type === 'assignment' && onViewScores}
-              <button class="icon-btn" title="View Scores" on:click={() => onViewScores(item)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="20" x2="18" y2="10"/>
-                  <line x1="12" y1="20" x2="12" y2="4"/>
-                  <line x1="6"  y1="20" x2="6"  y2="14"/>
-                </svg>
-              </button>
-            {/if}
-            {#if item.type === 'assignment' && onDownloadSubmissions}
-              <button class="icon-btn" title="Download Submissions" on:click={() => onDownloadSubmissions(item)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-              </button>
-            {/if}
-            {#if item.type === 'quiz' && item.is_old_quiz}
-              <button class="icon-btn" title="Download Questions" on:click={() => downloadQuizQuestions(item)}>
-                <img src={iconQuestions} alt="Download Questions" width="20" height="20" />
-              </button>
-              <div class="submissions-wrapper">
-                <button
-                  class="icon-btn"
-                  title="Download Submissions"
-                  on:click={() => toggleDropdown(item.id)}
-                  on:focusout={closeDropdown}
-                >
-                  <img src={iconSubmissions} alt="Download Submissions" width="20" height="20" />
-                </button>
-                <div class="dropdown-menu" class:visible={openDropdownId === item.id}>
-                  <button class="dropdown-item" on:click|stopPropagation={() => submitWithFormat(item, 'md')}>
-                    Markdown (.md)
-                  </button>
-                  <button class="dropdown-item" on:click|stopPropagation={() => submitWithFormat(item, 'html')}>
-                    HTML (.html)
-                  </button>
-                  <button class="dropdown-item" on:click|stopPropagation={() => submitWithFormat(item, 'json')}>
-                    JSON (.json)
-                  </button>
-                </div>
-              </div>
-            {/if}
-          </td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-{/if}
+  {#snippet typeCell(item)}
+    <span class="type-badge" class:quiz={item.type === 'quiz'}>
+      {item.type === 'quiz' ? (item.is_old_quiz ? 'old-quiz' : 'new-quiz') : 'assignment'}
+    </span>
+  {/snippet}
+
+  {#snippet actionsCell(item)}
+    <button class="icon-btn" title="Upload Grades" on:click={() => onUpload(item)}>
+      <img src={iconUpload} alt="Upload Grades" width="20" height="20" />
+    </button>
+    {#if item.type === 'assignment' && onEdit}
+      <button class="icon-btn" title="Edit Assignment" on:click={() => onEdit(item)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+      </button>
+    {/if}
+    {#if item.type === 'assignment' && onViewScores}
+      <button class="icon-btn" title="View Scores" on:click={() => onViewScores(item)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"/>
+          <line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6"  y1="20" x2="6"  y2="14"/>
+        </svg>
+      </button>
+    {/if}
+    {#if item.type === 'assignment' && onDownloadSubmissions}
+      <button class="icon-btn" title="Download Submissions" on:click={() => onDownloadSubmissions(item)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
+    {/if}
+    {#if item.type === 'quiz' && item.is_old_quiz}
+      <button class="icon-btn" title="Download Questions" on:click={() => downloadQuizQuestions(item)}>
+        <img src={iconQuestions} alt="Download Questions" width="20" height="20" />
+      </button>
+      <div class="submissions-wrapper">
+        <button
+          class="icon-btn"
+          title="Download Submissions"
+          on:click={() => toggleDropdown(item.id)}
+          on:focusout={closeDropdown}
+        >
+          <img src={iconSubmissions} alt="Download Submissions" width="20" height="20" />
+        </button>
+        <div class="dropdown-menu" class:visible={openDropdownId === item.id}>
+          <button class="dropdown-item" on:click|stopPropagation={() => submitWithFormat(item, 'md')}>
+            Markdown (.md)
+          </button>
+          <button class="dropdown-item" on:click|stopPropagation={() => submitWithFormat(item, 'html')}>
+            HTML (.html)
+          </button>
+          <button class="dropdown-item" on:click|stopPropagation={() => submitWithFormat(item, 'json')}>
+            JSON (.json)
+          </button>
+        </div>
+      </div>
+    {/if}
+  {/snippet}
+
+  <DataTable
+    data={filteredItems}
+    columns={itemColumns}
+    cells={{ type: typeCell, actions: actionsCell }}
+    rowKey={(item) => item.id + '-' + item.type}
+    emptyMessage="No items found."
+    dense
+  />
 
 <style>
-  .status {
-    text-align: center;
-    padding: 32px;
-    color: var(--text-secondary);
-  }
-
-  .id-cell {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  .name-cell {
-    font-weight: 500;
-  }
-
-  .actions-cell {
-    text-align: right;
-    white-space: nowrap;
-  }
-
   .filter-bar {
     display: flex;
     gap: 6px;

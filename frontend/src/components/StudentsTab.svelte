@@ -1,6 +1,7 @@
 <script>
   import { GetStudentSubmissions, ExportStudentsCSV } from '../../bindings/canvaslms-gui/app.js'
   import { toast } from 'svelte-sonner'
+  import DataTable from './DataTable.svelte'
 
   export let course
   export let students
@@ -43,6 +44,50 @@
       toast.error(e.message || 'Download failed')
     }
   }
+
+  // ---- Roster columns (client-side sorting via DataTable) ----
+  const rosterColumns = [
+    { accessorKey: 'id', header: 'ID', meta: { cellClass: 'id-cell' } },
+    { accessorKey: 'name', header: 'Name' },
+    {
+      accessorKey: 'email',
+      header: 'Email',
+      cell: (info) => info.getValue() || 'N/A'
+    },
+    {
+      accessorKey: 'sis_user_id',
+      header: 'SIS ID',
+      meta: { cellClass: 'id-cell' },
+      cell: (info) => info.getValue() || 'N/A'
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      enableSorting: false,
+      snippet: true
+    }
+  ]
+
+  // ---- Submissions drill-down columns ----
+  const submissionColumns = [
+    {
+      id: 'assignment',
+      header: 'Assignment',
+      accessorFn: (row) => itemNameByID[row.assignment_id] || 'Assignment ' + row.assignment_id,
+      snippet: true
+    },
+    {
+      accessorKey: 'score',
+      header: 'Score',
+      cell: (info) => (info.getValue() != null ? info.getValue() : '-')
+    },
+    { accessorKey: 'workflow_state', header: 'Status' },
+    {
+      accessorKey: 'submitted_at',
+      header: 'Submitted',
+      cell: ({ row }) => formatDate(row.original.submitted_at)
+    }
+  ]
 </script>
 
 {#if selectedStudent}
@@ -51,36 +96,20 @@
       <h3>Submissions — {selectedStudent.name}</h3>
       <button class="link" on:click={closeSubmissions}>Back to roster</button>
     </div>
-    {#if submissionsLoading}
-      <p class="status">Loading submissions...</p>
-    {:else if studentSubmissions.length === 0}
-      <p class="status">No submissions found.</p>
-    {:else}
-      <table>
-        <thead>
-          <tr>
-            <th>Assignment</th>
-            <th>Score</th>
-            <th>Status</th>
-            <th>Submitted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each studentSubmissions as sub}
-            <tr>
-              <td>
-                <span class="assignment-name">
-                  {itemNameByID[sub.assignment_id] || 'Assignment ' + sub.assignment_id}
-                </span>
-              </td>
-              <td>{sub.score != null ? sub.score : '-'}</td>
-              <td>{sub.workflow_state}</td>
-              <td>{formatDate(sub.submitted_at)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
+
+    {#snippet assignmentCell(sub)}
+      <span class="assignment-name">{itemNameByID[sub.assignment_id] || 'Assignment ' + sub.assignment_id}</span>
+    {/snippet}
+
+    <DataTable
+      data={studentSubmissions}
+      columns={submissionColumns}
+      cells={{ assignment: assignmentCell }}
+      rowKey="assignment_id"
+      loading={submissionsLoading}
+      emptyMessage="No submissions found."
+      dense
+    />
   </div>
 {:else}
   <div class="roster-actions">
@@ -89,36 +118,20 @@
     </button>
   </div>
 
-  {#if students.length === 0}
-    <p class="status">No students found.</p>
-  {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>SIS ID</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each students as s}
-          <tr>
-            <td class="id-cell">{s.id}</td>
-            <td>{s.name}</td>
-            <td>{s.email || 'N/A'}</td>
-            <td class="id-cell">{s.sis_user_id || 'N/A'}</td>
-            <td class="actions-cell">
-              <button class="primary small" on:click={() => viewSubmissions(s)}>
-                Submissions
-              </button>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
+  {#snippet actionsCell(student)}
+    <button class="primary small" on:click={() => viewSubmissions(student)}>
+      Submissions
+    </button>
+  {/snippet}
+
+  <DataTable
+    data={students}
+    columns={rosterColumns}
+    cells={{ actions: actionsCell }}
+    rowKey="id"
+    emptyMessage="No students found."
+    dense
+  />
 {/if}
 
 <style>
@@ -134,16 +147,6 @@
     text-align: center;
     padding: 32px;
     color: var(--text-secondary);
-  }
-
-  .id-cell {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  .actions-cell {
-    text-align: right;
   }
 
   button.small {
