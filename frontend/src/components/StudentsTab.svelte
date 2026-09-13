@@ -108,6 +108,7 @@
       rowKey="assignment_id"
       loading={submissionsLoading}
       emptyMessage="No submissions found."
+      dense
     />
   </div>
 {:else}
@@ -129,6 +130,7 @@
     cells={{ actions: actionsCell }}
     rowKey="id"
     emptyMessage="No students found."
+    dense
   />
 {/if}
 

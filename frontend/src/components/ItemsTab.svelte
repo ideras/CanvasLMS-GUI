@@ -226,6 +226,7 @@
     cells={{ type: typeCell, actions: actionsCell }}
     rowKey={(item) => item.id + '-' + item.type}
     emptyMessage="No items found."
+    dense
   />
 
 <style>

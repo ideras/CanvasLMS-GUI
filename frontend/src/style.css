@@ -110,6 +110,12 @@ td:last-child {
   border-right: none;
 }
 
+/* dense variant: reduced row height */
+.dense-table th,
+.dense-table td {
+  padding: 4px 14px;
+}
+
 th {
   background: linear-gradient(180deg, #eaf2f8, #dce6f0);
   font-weight: 600;

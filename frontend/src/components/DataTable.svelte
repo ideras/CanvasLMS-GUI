@@ -39,7 +39,8 @@
     emptyMessage = 'No data.',
     tableClass = '',
     rowClass = null,        // fn(row.original) -> extra <tr> class(es)
-    resizable = true        // column resize handles; columns opt out via enableResizing: false
+    resizable = true,       // column resize handles; columns opt out via enableResizing: false
+    dense = false           // reduced row height (smaller vertical padding)
   } = $props()
 
   // Columns flagged `snippet: true` get their cell content from the `cells`
@@ -139,7 +140,7 @@
   let columnCount = $derived(table.getAllLeafColumns().length)
 </script>
 
-<table class={tableClass} style={userResized ? 'table-layout: fixed; width: 100%' : ''}>
+<table class={[tableClass, dense ? 'dense-table' : '']} style={userResized ? 'table-layout: fixed; width: 100%' : ''}>
   <thead bind:this={theadEl}>
     {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
       <tr>
