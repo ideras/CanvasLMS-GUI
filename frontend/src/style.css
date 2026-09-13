@@ -101,6 +101,13 @@ th, td {
   text-align: left;
   padding: 10px 14px;
   border-bottom: 1px solid var(--table-line);
+  border-right: 1px solid var(--table-line);
+}
+
+/* keep the table's outer edges clean: no separator on the last column */
+th:last-child,
+td:last-child {
+  border-right: none;
 }
 
 th {
