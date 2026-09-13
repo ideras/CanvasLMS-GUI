@@ -2,7 +2,6 @@
   import { GetStudentSubmissions, ExportStudentsCSV } from '../../bindings/canvaslms-gui/app.js'
   import { toast } from 'svelte-sonner'
   import DataTable from './DataTable.svelte'
-  import { renderSnippet } from '@tanstack/svelte-table'
 
   export let course
   export let students
@@ -65,7 +64,7 @@
       id: 'actions',
       header: 'Actions',
       enableSorting: false,
-      cell: ({ row }) => renderSnippet(actionsCell, row.original)
+      snippet: true
     }
   ]
 
@@ -75,7 +74,7 @@
       id: 'assignment',
       header: 'Assignment',
       accessorFn: (row) => itemNameByID[row.assignment_id] || 'Assignment ' + row.assignment_id,
-      cell: ({ row }) => renderSnippet(assignmentCell, row.original)
+      snippet: true
     },
     {
       accessorKey: 'score',
@@ -105,6 +104,7 @@
     <DataTable
       data={studentSubmissions}
       columns={submissionColumns}
+      cells={{ assignment: assignmentCell }}
       rowKey="assignment_id"
       loading={submissionsLoading}
       emptyMessage="No submissions found."
@@ -126,6 +126,7 @@
   <DataTable
     data={students}
     columns={rosterColumns}
+    cells={{ actions: actionsCell }}
     rowKey="id"
     emptyMessage="No students found."
   />

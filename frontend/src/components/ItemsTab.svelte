@@ -5,7 +5,6 @@
   import { onMount } from 'svelte'
   import { fly } from 'svelte/transition'
   import DataTable from './DataTable.svelte'
-  import { renderSnippet } from '@tanstack/svelte-table'
   import iconUpload from '../assets/images/icon-upload.svg'
   import iconQuestions from '../assets/images/icon-questions.svg'
   import iconSubmissions from '../assets/images/icon-submissions.svg'
@@ -84,7 +83,7 @@
   }
 
   // ---- Items table columns (DataTable / TanStack) ----
-  function numericSort(rowA, rowB, columnId) {
+  function numericSortFn(rowA, rowB, columnId) {
     const toNum = (v) => (typeof v === 'number' ? v : parseFloat(v))
     const a = toNum(rowA.getValue(columnId))
     const b = toNum(rowB.getValue(columnId))
@@ -100,7 +99,7 @@
     {
       accessorKey: 'type',
       header: 'Type',
-      cell: ({ row }) => renderSnippet(typeCell, row.original)
+      snippet: true
     },
     {
       accessorKey: 'due_at',
@@ -117,7 +116,7 @@
       id: 'actions',
       header: 'Actions',
       enableSorting: false,
-      cell: ({ row }) => renderSnippet(actionsCell, row.original)
+      snippet: true
     }
   ]
 </script>
@@ -223,6 +222,7 @@
   <DataTable
     data={filteredItems}
     columns={itemColumns}
+    cells={{ type: typeCell, actions: actionsCell }}
     rowKey={(item) => item.id + '-' + item.type}
     emptyMessage="No items found."
   />

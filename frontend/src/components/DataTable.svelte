@@ -22,12 +22,14 @@
     tableFeatures,
     rowSortingFeature,
     createSortedRowModel,
-    sortFns
+    sortFns,
+    renderSnippet
   } from '@tanstack/svelte-table'
 
   let {
     data = [],
     columns,
+    cells = {},             // { columnId: snippet } — snippet-backed cells, passed as props
     rowKey = null,          // fn(row) -> id, or string field name; stabilizes row identity
     sortable = true,        // master switch; columns opt out via enableSorting: false
     initialSorting = [],    // e.g. [{ id: 'score', desc: true }]
@@ -36,6 +38,12 @@
     tableClass = '',
     rowClass = null         // fn(row.original) -> extra <tr> class(es)
   } = $props()
+
+  // Columns flagged `snippet: true` get their cell content from the `cells`
+  // prop (snippets cannot be referenced from script-built column defs —
+  // template-scoped snippets are not visible to script closures). The
+  // snippet receives the raw row record and keeps the consumer component's
+  // scoped CSS.
 
   const features = tableFeatures({
     rowSortingFeature,
@@ -49,9 +57,16 @@
     return (row) => String(row[rk])
   }
 
+  const resolvedColumns = columns.map((col) => {
+    const colId = col.id ?? col.accessorKey
+    return col.snippet && cells[colId]
+      ? { ...col, id: colId, cell: ({ row }) => renderSnippet(cells[colId], row.original) }
+      : col
+  })
+
   const table = createTable({
     features,
-    columns,
+    columns: resolvedColumns,
     get data() {
       return data
     },
@@ -102,7 +117,7 @@
     {:else}
       {#each rows as row (row.id)}
         <tr class={rowClass ? rowClass(row.original) : ''}>
-          {#each row.getVisibleCells() as cell (cell.id)}
+          {#each row.getAllCells() as cell (cell.id)}
             <td class={cell.column.columnDef.meta?.cellClass ?? ''}>
               <FlexRender cell={cell} />
             </td>

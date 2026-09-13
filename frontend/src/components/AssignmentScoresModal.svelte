@@ -88,7 +88,6 @@
 
   // ---- Table (DataTable / TanStack) ----
   import DataTable from './DataTable.svelte'
-  import { renderSnippet } from '@tanstack/svelte-table'
 
   // Mirrors the previous hand-rolled comparator: numeric score desc,
   // unscored last, name tiebreak.
@@ -129,7 +128,7 @@
       header: 'Status',
       accessorFn: (row) => statusLabel(row.original).text,
       sortFn: statusSortFn,
-      cell: ({ row }) => renderSnippet(statusCell, row.original)
+      snippet: true
     },
     {
       accessorKey: 'submitted_at',
@@ -211,6 +210,7 @@
         <DataTable
           data={submissions}
           columns={scoreColumns}
+          cells={{ status: statusCell }}
           rowKey="user_id"
           tableClass="compact-table"
           rowClass={(s) => (s.late && !s.missing ? 'late-row' : '')}
