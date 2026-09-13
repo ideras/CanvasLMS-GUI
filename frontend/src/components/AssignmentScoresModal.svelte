@@ -78,6 +78,11 @@
   }
 
   function statusLabel(sub) {
+    // TanStack's auto-sort-direction probe calls accessorFn with a synthetic
+    // row whose `original` is undefined — must not throw (a throw here would
+    // abort the delegated event walk and fall through to the overlay's
+    // onClose, closing the dialog).
+    if (!sub) return { text: 'Not submitted', cls: 'none' }
     if (sub.excused)                      return { text: 'Excused',     cls: 'excused'   }
     if (sub.missing)                      return { text: 'Missing',     cls: 'missing'   }
     if (sub.workflow_state === 'graded')  return { text: 'Graded',      cls: 'graded'    }
@@ -89,16 +94,15 @@
   // ---- Table (DataTable / TanStack) ----
   import DataTable from './DataTable.svelte'
 
-  // Mirrors the previous hand-rolled comparator: numeric score desc,
-  // unscored last, name tiebreak.
+  // Mirrors the previous hand-rolled comparator: numeric score,
+  // unscored always last (null maps to -Infinity so the direction
+  // multiplier of asc/desc toggling never floats them to the top).
   function scoreSortFn(rowA, rowB, columnId) {
-    const toNum = (v) => (typeof v === 'number' ? v : parseFloat(v))
-    const a = toNum(rowA.getValue(columnId))
-    const b = toNum(rowB.getValue(columnId))
-    if (!isNaN(a) && !isNaN(b)) return a - b
-    if (!isNaN(a)) return -1
-    if (!isNaN(b)) return 1
-    return 0
+    const toNum = (v) => {
+      const n = typeof v === 'number' ? v : parseFloat(v)
+      return isNaN(n) ? -Infinity : n
+    }
+    return toNum(rowA.getValue(columnId)) - toNum(rowB.getValue(columnId))
   }
 
   const STATUS_ORDER = ['Graded', 'Submitted', 'Excused', 'Missing', 'Not submitted']

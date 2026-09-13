@@ -83,14 +83,14 @@
   }
 
   // ---- Items table columns (DataTable / TanStack) ----
+  // Nulls map to -Infinity so unscored/undated rows stay last in desc
+  // (the default first-click direction) instead of floating to the top.
   function numericSortFn(rowA, rowB, columnId) {
-    const toNum = (v) => (typeof v === 'number' ? v : parseFloat(v))
-    const a = toNum(rowA.getValue(columnId))
-    const b = toNum(rowB.getValue(columnId))
-    if (!isNaN(a) && !isNaN(b)) return a - b
-    if (!isNaN(a)) return -1
-    if (!isNaN(b)) return 1
-    return 0
+    const toNum = (v) => {
+      const n = typeof v === 'number' ? v : parseFloat(v)
+      return isNaN(n) ? -Infinity : n
+    }
+    return toNum(rowA.getValue(columnId)) - toNum(rowB.getValue(columnId))
   }
 
   const itemColumns = [

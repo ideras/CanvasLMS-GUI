@@ -64,6 +64,17 @@
       : col
   })
 
+  // Sort toggles must never throw: an exception inside this delegated
+  // handler aborts Svelte 5's event walk, so ancestor on:click handlers
+  // (e.g. a modal overlay's close-on-click) would fire unexpectedly.
+  function toggleSort(event, header) {
+    try {
+      header.column.getToggleSortingHandler()(event)
+    } catch (err) {
+      console.error('[DataTable] sort toggle failed for column', header.column.id, err)
+    }
+  }
+
   const table = createTable({
     features,
     columns: resolvedColumns,
@@ -88,7 +99,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <th
             class={canSort ? 'sortable-th' : ''}
-            onclick={canSort ? header.column.getToggleSortingHandler() : undefined}
+            onclick={canSort ? (event) => toggleSort(event, header) : undefined}
           >
             {#if !header.isPlaceholder}
               <FlexRender {header} />
