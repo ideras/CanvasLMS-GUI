@@ -93,7 +93,7 @@
 </div>
 
 {#if submissionsProgress}
-  <div class="progress-bar-wrapper" in:fly={{ y: -20, duration: 200 }}>
+  <div class="progress-bar-wrapper" in:fly|global={{ y: -20, duration: 200 }}>
     <div class="progress-track">
       {#if submissionsProgress.loading}
         <div class="progress-fill indeterminate"></div>

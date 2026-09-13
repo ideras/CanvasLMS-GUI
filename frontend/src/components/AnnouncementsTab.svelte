@@ -95,7 +95,7 @@
   {:else}
     <div class="announcement-list">
       {#each announcements as ann (ann.id)}
-        <div class="announcement-card" in:fly={{ y: 10, duration: 150 }}>
+        <div class="announcement-card" in:fly|global={{ y: 10, duration: 150 }}>
           <div class="card-header">
             <div class="card-title-row">
               <h4>{ann.title}</h4>

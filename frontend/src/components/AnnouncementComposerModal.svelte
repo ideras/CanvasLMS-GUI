@@ -81,7 +81,7 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="modal-backdrop" on:click={close}>
   <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <div class="modal-content" on:click|stopPropagation in:fly={{ y: 20, duration: 200 }}>
+  <div class="modal-content" on:click|stopPropagation in:fly|global={{ y: 20, duration: 200 }}>
     <div class="modal-header">
       <h2>{modalTitle}</h2>
       <button class="btn-close" on:click={close}>✕</button>
