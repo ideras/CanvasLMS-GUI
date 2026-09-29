@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -606,6 +607,7 @@ func (a *App) UploadGrades(courseID int, assignmentID int, csvPath string) error
 	}
 	a.uploadDecisions = make(chan string, 1)
 	emitter := adapters.NewWailsEmitter()
+	a.emitEvent("upload:started", map[string]any{"course_id": courseID, "assignment_id": assignmentID})
 	a.cancelUpload, a.uploadDone = uploader.Start(a.ctx, cache.LiveClient(a.client), emitter, courseID, assignmentID, csvPath, a.uploadDecisions, a.uploadCache)
 	return nil
 }
@@ -628,6 +630,67 @@ func (a *App) CancelUpload() {
 		a.cancelUpload()
 		a.cancelUpload = nil
 	}
+}
+
+// uploadRunning is used by the native close hook; checking it never does I/O.
+func (a *App) uploadRunning() bool {
+	a.uploadMu.Lock()
+	defer a.uploadMu.Unlock()
+	if a.uploadDone == nil {
+		return false
+	}
+	select {
+	case <-a.uploadDone:
+		return false
+	default:
+		return true
+	}
+}
+
+// ConfirmClose explicitly exits after the user acknowledges the upload warning.
+func (a *App) ConfirmClose() {
+	if a.wailsApp != nil {
+		a.wailsApp.Quit()
+	}
+}
+
+// ExportUploadIssues uses a native save dialog. Wails executes service methods
+// off the GUI thread; only the native picker is dispatched onto that thread.
+func (a *App) ExportUploadIssues(issuesJSON string) (string, error) {
+	var issues []grades.StudentIssue
+	if err := json.Unmarshal([]byte(issuesJSON), &issues); err != nil {
+		return "", fmt.Errorf("invalid issue list")
+	}
+	path, err := a.saveFileDialog(&application.SaveFileDialogOptions{
+		Title: "Export unmatched/skipped students", Filename: "unmatched-students.csv",
+		Filters: []application.FileFilter{{DisplayName: "CSV Files", Pattern: "*.csv"}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return "", fmt.Errorf("create issue list: %w", err)
+	}
+	writer := csv.NewWriter(file)
+	_ = writer.Write([]string{"student_id", "csv_row", "reason"})
+	for _, issue := range issues {
+		reason := issue.Reason
+		if strings.HasPrefix(reason, "=") || strings.HasPrefix(reason, "+") || strings.HasPrefix(reason, "-") || strings.HasPrefix(reason, "@") {
+			reason = "'" + reason
+		}
+		_ = writer.Write([]string{issue.StudentID, fmt.Sprint(issue.Row), reason})
+	}
+	writer.Flush()
+	writeErr := writer.Error()
+	closeErr := file.Close()
+	if writeErr != nil {
+		return "", fmt.Errorf("write issue list: %w", writeErr)
+	}
+	if closeErr != nil {
+		return "", fmt.Errorf("close issue list: %w", closeErr)
+	}
+	return path, nil
 }
 
 // --- Markdown Conversion ---

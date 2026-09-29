@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -49,6 +50,12 @@ func main() {
 	})
 
 	app.setDesktop(wailsApp, mainWindow)
+	mainWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if app.uploadRunning() {
+			event.Cancel()
+			app.emitEvent("upload:close_requested", map[string]any{})
+		}
+	})
 
 	if err := wailsApp.Run(); err != nil {
 		log.Fatal(err)
