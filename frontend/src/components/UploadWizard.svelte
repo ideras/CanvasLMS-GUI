@@ -1,6 +1,7 @@
 <script>
   import { UploadGrades, CancelUpload, BrowseCSVFile } from '../../bindings/canvaslms-gui/app.js'
   import { Events } from '@wailsio/runtime'
+  import { normalizeCSVPath, pasteCSVPath } from '../lib/upload.js'
 
   export let course
   export let assignment
@@ -16,10 +17,11 @@
 
 
   function startUpload() {
-    if (!csvPath.trim()) return
+    csvPath = normalizeCSVPath(csvPath)
+    if (!csvPath) return
     step = 'upload'
     error = null
-    UploadGrades(course.id, assignment.assignment_id || assignment.id, csvPath.trim())
+    UploadGrades(course.id, assignment.assignment_id || assignment.id, csvPath)
   }
 
   function cancel() {
@@ -72,8 +74,9 @@
       <div class="file-picker">
         <input
           type="text"
-          readonly
-          placeholder="No file selected…"
+          on:paste={(event) => csvPath = pasteCSVPath(event, csvPath)}
+          aria-label="Grades CSV path"
+          placeholder="Type, paste, or browse for a CSV path…"
           bind:value={csvPath}
           class="file-path-input"
         />
@@ -245,7 +248,7 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 6px 10px;
-    cursor: default;
+    cursor: text;
   }
 
   .btn-sm {
