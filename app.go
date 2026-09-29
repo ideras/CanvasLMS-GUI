@@ -18,6 +18,7 @@ import (
 	"canvaslms-gui/internal/cache"
 	"canvaslms-gui/internal/courses"
 	"canvaslms-gui/internal/export"
+	"canvaslms-gui/internal/grades"
 	"canvaslms-gui/internal/models"
 	"canvaslms-gui/internal/uploader"
 	markdown "github.com/ideras/md-to-pdf"
@@ -43,6 +44,8 @@ type App struct {
 	uploadDone      <-chan struct{}
 	uploadMu        sync.Mutex
 	uploadDecisions chan string
+	uploadCache     *grades.UploadCache
+	uploadTarget    string
 	cacheStore      cache.Store
 
 	// Desktop handles for v3 runtime operations (dialogs, events). Kept
@@ -595,9 +598,15 @@ func (a *App) UploadGrades(courseID int, assignmentID int, csvPath string) error
 	if a.client == nil {
 		return fmt.Errorf("configure Canvas before uploading grades")
 	}
+	baseURL, token := a.effectiveCredentials()
+	target := fmt.Sprintf("%s/%s/%d/%d", baseURL, tokenCacheID(token), courseID, assignmentID)
+	if a.uploadCache == nil || a.uploadTarget != target {
+		a.uploadCache = grades.NewUploadCache()
+		a.uploadTarget = target
+	}
 	a.uploadDecisions = make(chan string, 1)
 	emitter := adapters.NewWailsEmitter()
-	a.cancelUpload, a.uploadDone = uploader.Start(a.ctx, cache.LiveClient(a.client), emitter, courseID, assignmentID, csvPath, a.uploadDecisions)
+	a.cancelUpload, a.uploadDone = uploader.Start(a.ctx, cache.LiveClient(a.client), emitter, courseID, assignmentID, csvPath, a.uploadDecisions, a.uploadCache)
 	return nil
 }
 

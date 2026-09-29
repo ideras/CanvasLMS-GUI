@@ -3,10 +3,13 @@ package grades
 import (
 	"encoding/csv"
 	"fmt"
+	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	apperrors "canvaslms-gui/internal/errors"
 )
@@ -71,6 +74,7 @@ type Loader struct {
 // NewLoader creates a new Loader. rootDir is the base directory for resolving
 // relative file paths; if empty, the CSV file's directory is used.
 func NewLoader(csvPath, rootDir string) *Loader {
+	csvPath = NormalizeCSVPath(csvPath)
 	if rootDir == "" {
 		rootDir = filepath.Dir(csvPath)
 	}
@@ -98,7 +102,21 @@ func (l *Loader) Parse() (*LoadResult, error) {
 	}
 	defer f.Close()
 
-	reader := csv.NewReader(f)
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("read CSV: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("CSV path is not a regular file: %s", l.csvPath)
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read CSV: %w", err)
+	}
+	if !utf8.Valid(data) {
+		return nil, &apperrors.ValidationError{Field: "csv", Message: "bad CSV encoding: save as UTF-8"}
+	}
+	reader := csv.NewReader(strings.NewReader(strings.TrimPrefix(string(data), "\ufeff")))
 	records, err := reader.ReadAll()
 	if err != nil {
 		return nil, &apperrors.ValidationError{Field: "csv", Message: fmt.Sprintf("failed to read CSV: %v", err)}
@@ -112,7 +130,14 @@ func (l *Loader) Parse() (*LoadResult, error) {
 	header := records[0]
 	colIndex := make(map[string]int)
 	for i, h := range header {
-		colIndex[strings.TrimSpace(h)] = i
+		name := strings.TrimSpace(h)
+		if canonical, ok := columnRenames[name]; ok {
+			name = canonical
+		}
+		if _, duplicate := colIndex[name]; duplicate {
+			return nil, &apperrors.ValidationError{Field: "csv", Message: "duplicate column: " + name}
+		}
+		colIndex[name] = i
 	}
 
 	// Apply renames to the column index
@@ -155,6 +180,7 @@ func (l *Loader) Parse() (*LoadResult, error) {
 
 	// Parse rows
 	var students []StudentGrade
+	seenIDs := make(map[int]bool)
 	for i := 1; i < len(records); i++ {
 		row := records[i]
 		rowNum := i + 1 // 1-based, accounting for header
@@ -176,7 +202,7 @@ func (l *Loader) Parse() (*LoadResult, error) {
 		}
 
 		grade, err := strconv.ParseFloat(gradeStr, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(grade) || math.IsInf(grade, 0) {
 			return nil, &apperrors.ValidationError{
 				Field:   "grade",
 				Message: fmt.Sprintf("invalid grade on row %d (student %s): %s", rowNum, sid, gradeStr),
@@ -184,12 +210,18 @@ func (l *Loader) Parse() (*LoadResult, error) {
 		}
 
 		// Validate student_id is numeric
-		if _, err := strconv.Atoi(sid); err != nil {
+		id, err := strconv.Atoi(sid)
+		if err != nil || id <= 0 {
 			return nil, &apperrors.ValidationError{
 				Field:   "student_id",
 				Message: fmt.Sprintf("invalid student ID on row %d: %s", rowNum, sid),
 			}
 		}
+
+		if seenIDs[id] {
+			return nil, &apperrors.ValidationError{Field: "student_id", Message: fmt.Sprintf("duplicate student ID on row %d: %s", rowNum, sid)}
+		}
+		seenIDs[id] = true
 
 		sg := StudentGrade{
 			StudentID: sid,
@@ -244,6 +276,7 @@ func (l *Loader) ConvertMarkdownFiles(result *LoadResult, converter MarkdownConv
 		return nil
 	}
 
+	var issues []FileIssue
 	for i := range result.Students {
 		sg := &result.Students[i]
 
@@ -262,12 +295,15 @@ func (l *Loader) ConvertMarkdownFiles(result *LoadResult, converter MarkdownConv
 			}
 			pdfPath := replaceExt(p.mdPath, ".pdf")
 			if err := converter.ConvertFile(p.mdPath, pdfPath); err != nil {
-				return fmt.Errorf("convert %s: %w", p.mdPath, err)
+				issues = append(issues, FileIssue{sg.StudentID, p.mdPath, "conversion error: " + err.Error()})
+				continue
 			}
 			*p.pdfDest = pdfPath
 		}
 	}
-
+	if len(issues) > 0 {
+		return &FileProblems{Issues: issues}
+	}
 	return nil
 }
 
@@ -301,6 +337,7 @@ func (l *Loader) CheckFiles(result *LoadResult) error {
 }
 
 func (l *Loader) checkFiles(students []StudentGrade) error {
+	var issues []FileIssue
 	for i := range students {
 		sg := &students[i]
 
@@ -322,21 +359,28 @@ func (l *Loader) checkFiles(students []StudentGrade) error {
 			if c.path == "" {
 				continue
 			}
-			if _, err := os.Stat(c.path); os.IsNotExist(err) {
-				return &apperrors.ValidationError{
-					Field:   "file",
-					Message: fmt.Sprintf("%s file does not exist: %s", c.kind, c.path),
-				}
+			if err := CheckReadable(c.path); err != nil {
+				issues = append(issues, FileIssue{sg.StudentID, c.path, fileReason(err)})
+				continue
 			}
 			if !strings.HasSuffix(strings.ToLower(c.path), c.ext) {
-				return &apperrors.ValidationError{
-					Field:   "file",
-					Message: fmt.Sprintf("invalid %s file extension: %s", c.kind, c.path),
-				}
+				issues = append(issues, FileIssue{sg.StudentID, c.path, "invalid " + c.kind + " file extension (expected " + c.ext + ")"})
 			}
 		}
 	}
+	if len(issues) > 0 {
+		return &FileProblems{Issues: issues}
+	}
 	return nil
+}
+
+// NormalizeCSVPath accepts paths copied with balanced Explorer/shell quotes.
+func NormalizeCSVPath(path string) string {
+	path = strings.TrimSpace(path)
+	if len(path) >= 2 && ((path[0] == '"' && path[len(path)-1] == '"') || (path[0] == '\'' && path[len(path)-1] == '\'')) {
+		path = strings.TrimSpace(path[1 : len(path)-1])
+	}
+	return path
 }
 
 func replaceExt(path, newExt string) string {

@@ -33,6 +33,8 @@ type Uploader struct {
 	emitter          EventEmitter
 	ConfirmUnmatched func(context.Context, []StudentIssue) error
 	Prepare          func(*LoadResult) error
+	Cache            *UploadCache
+	Submitted        bool // includes ambiguous submission-network failures; never auto-resubmit
 }
 
 // NewUploader creates a new Uploader. If emitter is nil, events are discarded.
@@ -102,8 +104,14 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 			return err
 		}
 	}
+	if err := NewLoader("", "").CheckFiles(result); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if u.Cache == nil {
+		u.Cache = NewUploadCache()
 	}
 
 	folderName := generateFeedbackFolderName(assignmentName, assignmentID)
@@ -150,6 +158,7 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 
 	var doneFiles int64    // atomic counter — goroutines run concurrently
 	var filesMu sync.Mutex // multiple files can belong to the same student
+	var issues []FileIssue
 
 	for i := range result.Students {
 		i := i
@@ -169,9 +178,18 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 			}
 
 			g.Go(func() error {
-				info, err := u.client.UploadFileToCourse(gctx, path, courseID, folder.ID)
+				if err := gctx.Err(); err != nil {
+					return err
+				}
+				info, err := u.Cache.Upload(gctx, u.client, courseID, assignmentID, folder.ID, path)
 				if err != nil {
-					return fmt.Errorf("upload %s for student %s: %w", col, sg.StudentID, err)
+					if gctx.Err() != nil {
+						return gctx.Err()
+					}
+					filesMu.Lock()
+					issues = append(issues, FileIssue{sg.StudentID, path, "upload error: " + err.Error()})
+					filesMu.Unlock()
+					return nil // collect all failures; don't cancel other file uploads
 				}
 				filesMu.Lock()
 				row.Files = append(row.Files, uploadedFile{
@@ -196,8 +214,13 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 	}
 
 	if err := g.Wait(); err != nil {
-		u.emitter.Emit("upload:error", map[string]any{"error": err.Error()})
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(issues) > 0 {
+		return &FileProblems{Issues: issues}
 	}
 
 	// Step 4: build grade entries and batch submit (Phase 2)
@@ -212,9 +235,9 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 		}
 	}
 
+	u.Submitted = true
 	progressURL, err := u.client.BatchSubmitGrades(ctx, courseID, assignmentID, entries)
 	if err != nil {
-		u.emitter.Emit("upload:error", map[string]any{"error": err.Error()})
 		return fmt.Errorf("batch submit grades: %w", err)
 	}
 
@@ -223,7 +246,6 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 
 	updates, err := u.client.PollBatchProgress(ctx, progressURL)
 	if err != nil {
-		u.emitter.Emit("upload:error", map[string]any{"error": err.Error()})
 		return fmt.Errorf("poll progress: %w", err)
 	}
 

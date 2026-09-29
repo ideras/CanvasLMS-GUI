@@ -13,6 +13,8 @@
   let fileProgress = { done: 0, total: 0, student: '', file: '' }
   let batchProgress = { completion: 0, state: 'not_started' }
   let error = null
+  let retryable = false
+  let fileIssues = []
   let statusMsg = ''
   let unmatched = []
   let summary = { total: 0, skipped: [], failed: [] }
@@ -23,6 +25,8 @@
     if (!csvPath) return
     step = 'upload'
     error = null
+    retryable = false
+    fileIssues = []
     unmatched = []
     summary = { total: 0, skipped: [], failed: [] }
     fileProgress = { done: 0, total: 0, student: '', file: '' }
@@ -60,6 +64,8 @@
       }),
       Events.On('upload:error', (e) => {
         error = e.data.error
+        retryable = e.data.retryable === true
+        fileIssues = e.data.files || []
       }),
       Events.On('upload:unmatched', (e) => {
         unmatched = e.data.students
@@ -125,10 +131,23 @@
         {#if error}
           <div class="error-box">
             <p class="error-title">Upload Failed</p>
-            <p>{error}</p>
+            <p>{fileIssues.length ? 'Fix the files or edit the CSV, then retry the entire workflow.' : error}</p>
+            {#if fileIssues.length}
+              <ul class="issue-list">
+                {#each fileIssues as issue}<li>Student {issue.student_id} — {issue.file}: {issue.reason}</li>{/each}
+              </ul>
+            {/if}
           </div>
+          {#if retryable}
+            <p class="hint">Retry re-reads this CSV and the course roster. Confirmed, unchanged uploads from this session are reused.</p>
+            <div class="file-picker">
+              <input type="text" class="file-path-input" aria-label="Grades CSV path for retry" bind:value={csvPath} on:paste={(event) => csvPath = pasteCSVPath(event, csvPath)} />
+              <button class="btn-sm" on:click={browseForFile}>Browse…</button>
+            </div>
+          {/if}
           <div class="wizard-footer">
-            <button class="secondary" on:click={onClose}>Close</button>
+            <button class="secondary" on:click={onClose}>Cancel</button>
+            {#if retryable}<button class="primary" disabled={!csvPath.trim()} on:click={startUpload}>Retry</button>{/if}
           </div>
         {:else}
           <p class="step-label">{statusMsg || 'Uploading...'}</p>
