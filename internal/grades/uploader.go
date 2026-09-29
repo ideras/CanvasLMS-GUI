@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,8 +29,10 @@ func (noopEmitter) Emit(string, map[string]any) {}
 
 // Uploader orchestrates the grade upload workflow.
 type Uploader struct {
-	client  api.CanvasClient
-	emitter EventEmitter
+	client           api.CanvasClient
+	emitter          EventEmitter
+	ConfirmUnmatched func(context.Context, []StudentIssue) error
+	Prepare          func(*LoadResult) error
 }
 
 // NewUploader creates a new Uploader. If emitter is nil, events are discarded.
@@ -68,16 +71,7 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 		return &apperrors.ValidationError{Field: "csv", Message: "no students to upload"}
 	}
 
-	// Step 1: create feedback folder
-	folderName := generateFeedbackFolderName(assignmentName, assignmentID)
-	u.emitter.Emit("upload:status", map[string]any{"message": "Creating feedback folder: " + folderName})
-
-	folder, err := u.client.EnsureCourseFolder(ctx, courseID, folderName)
-	if err != nil {
-		return fmt.Errorf("create feedback folder: %w", err)
-	}
-
-	// Step 2: validate student IDs against course roster
+	// Resolve the roster before any file validation/conversion or Canvas writes.
 	students, err := u.client.GetStudentsForCourse(ctx, courseID)
 	if err != nil {
 		return fmt.Errorf("get course roster: %w", err)
@@ -87,15 +81,40 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 		studentMap[fmt.Sprintf("%d", s.ID)] = s.Name
 	}
 
-	// Validate and build rows
+	matched, skipped := MatchStudents(result.Students, students)
+	if len(skipped) > 0 {
+		if u.ConfirmUnmatched == nil {
+			return &apperrors.ValidationError{Field: "student_id", Message: "students not found in course roster"}
+		}
+		if err := u.ConfirmUnmatched(ctx, skipped); err != nil {
+			return err
+		}
+	}
+	result = &LoadResult{Students: matched, HasMD: result.HasMD}
+	summary := map[string]any{"total": len(matched), "skipped": skipped, "failed": []StudentIssue{}}
+	u.emitter.Emit("upload:summary", summary)
+	if len(matched) == 0 {
+		u.emitter.Emit("upload:done", summary)
+		return nil
+	}
+	if u.Prepare != nil {
+		if err := u.Prepare(result); err != nil {
+			return err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	folderName := generateFeedbackFolderName(assignmentName, assignmentID)
+	u.emitter.Emit("upload:status", map[string]any{"message": "Creating feedback folder: " + folderName})
+	folder, err := u.client.EnsureCourseFolder(ctx, courseID, folderName)
+	if err != nil {
+		return fmt.Errorf("create feedback folder: %w", err)
+	}
+
 	rows := make([]gradeRow, len(result.Students))
 	for i, sg := range result.Students {
-		if _, ok := studentMap[sg.StudentID]; !ok {
-			return &apperrors.ValidationError{
-				Field:   "student_id",
-				Message: fmt.Sprintf("student ID %s not found in course roster", sg.StudentID),
-			}
-		}
 		rows[i] = gradeRow{
 			StudentID: sg.StudentID,
 			Grade:     sg.Grade,
@@ -129,7 +148,8 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(5)
 
-	var doneFiles int64 // atomic counter — goroutines run concurrently
+	var doneFiles int64    // atomic counter — goroutines run concurrently
+	var filesMu sync.Mutex // multiple files can belong to the same student
 
 	for i := range result.Students {
 		i := i
@@ -153,6 +173,7 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 				if err != nil {
 					return fmt.Errorf("upload %s for student %s: %w", col, sg.StudentID, err)
 				}
+				filesMu.Lock()
 				row.Files = append(row.Files, uploadedFile{
 					Column:      col,
 					FileID:      info.ID,
@@ -161,6 +182,7 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 					DownloadURL: info.DownloadURL,
 					PublicURL:   info.PublicURL,
 				})
+				filesMu.Unlock()
 				done := atomic.AddInt64(&doneFiles, 1) // thread-safe increment
 				u.emitter.Emit("upload:file_progress", map[string]any{
 					"student": studentName, // name instead of ID
@@ -208,10 +230,14 @@ func (u *Uploader) UploadGrades(ctx context.Context, courseID, assignmentID int,
 	for p := range updates {
 		switch p.WorkflowState {
 		case "completed":
-			u.emitter.Emit("upload:done", map[string]any{"total": len(entries)})
+			summary["failed"] = JobIssues(p)
+			summary["message"] = p.Message
+			u.emitter.Emit("upload:done", summary)
 			return nil
 		case "failed":
-			u.emitter.Emit("upload:error", map[string]any{"error": p.Message})
+			summary["failed"] = JobIssues(p)
+			summary["message"] = p.Message
+			u.emitter.Emit("upload:summary", summary)
 			return fmt.Errorf("grade upload failed: %s", p.Message)
 		default: // "queued" or "running"
 			u.emitter.Emit("upload:batch_progress", map[string]any{

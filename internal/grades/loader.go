@@ -77,8 +77,21 @@ func NewLoader(csvPath, rootDir string) *Loader {
 	return &Loader{csvPath: csvPath, rootDir: rootDir}
 }
 
-// Load reads the CSV, validates columns and types, and checks that referenced files exist.
+// Load reads and validates both the CSV and its referenced files.
 func (l *Loader) Load() (*LoadResult, error) {
+	result, err := l.Parse()
+	if err != nil {
+		return nil, err
+	}
+	if err := l.CheckFiles(result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// Parse validates CSV data without touching attachments. Roster matching must
+// happen before file validation/conversion so ignored students have no side effects.
+func (l *Loader) Parse() (*LoadResult, error) {
 	f, err := os.Open(l.csvPath)
 	if err != nil {
 		return nil, fmt.Errorf("open CSV: %w", err)
@@ -221,11 +234,6 @@ func (l *Loader) Load() (*LoadResult, error) {
 		HasMD:    hasMD,
 	}
 
-	// Validate file existence and extensions
-	if err := l.checkFiles(students); err != nil {
-		return nil, err
-	}
-
 	return result, nil
 }
 
@@ -285,6 +293,11 @@ func (l *Loader) resolve(row []string, colIndex map[string]int, colName string) 
 		path = filepath.Join(l.rootDir, path)
 	}
 	return filepath.Clean(path)
+}
+
+// CheckFiles validates attachments for the matched rows only.
+func (l *Loader) CheckFiles(result *LoadResult) error {
+	return l.checkFiles(result.Students)
 }
 
 func (l *Loader) checkFiles(students []StudentGrade) error {

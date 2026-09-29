@@ -73,9 +73,12 @@
     const unsubAppError = Events.On('app:error', (e) => {
       toast.error(e.data.message)
     })
-    const unsubUploadDone = Events.On('upload:done', () => {
-      toast.success('Grades uploaded successfully')
-      showUploadWizard = false
+    const unsubUploadDone = Events.On('upload:done', (e) => {
+      const skipped = e.data.skipped?.length || 0
+      const failed = e.data.failed?.length || 0
+      const message = `Canvas finished: ${e.data.total} matched, ${skipped} skipped, ${failed} failures/result warnings`
+      if (failed) toast.warning(message)
+      else toast.success(message)
     })
     const unsubUploadError = Events.On('upload:error', (e) => {
       toast.error(e.data.error || 'Upload failed')

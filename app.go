@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -32,15 +33,17 @@ type appConfig struct {
 
 // App holds application state and exposes methods to the Svelte frontend.
 type App struct {
-	ctx           context.Context
-	client        api.CanvasClient
-	exporter      export.Exporter
-	config        *appConfig
-	configPath    string
-	currentCourse *models.Course
-	cancelUpload  context.CancelFunc
-	uploadDone    <-chan struct{}
-	cacheStore    cache.Store
+	ctx             context.Context
+	client          api.CanvasClient
+	exporter        export.Exporter
+	config          *appConfig
+	configPath      string
+	currentCourse   *models.Course
+	cancelUpload    context.CancelFunc
+	uploadDone      <-chan struct{}
+	uploadMu        sync.Mutex
+	uploadDecisions chan string
+	cacheStore      cache.Store
 
 	// Desktop handles for v3 runtime operations (dialogs, events). Kept
 	// private on purpose: they must not become part of the frontend API.
@@ -106,6 +109,8 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 // ServiceShutdown cancels in-flight work and releases resources. Bounded
 // waiting ensures a stalled network operation cannot hang application exit.
 func (a *App) ServiceShutdown() error {
+	a.uploadMu.Lock()
+	defer a.uploadMu.Unlock()
 	if a.cancelUpload != nil {
 		a.cancelUpload()
 		a.cancelUpload = nil
@@ -418,8 +423,8 @@ func (a *App) saveFileDialog(opts *application.SaveFileDialogOptions) (string, e
 // frontend can embed a download link in the announcement message.
 func (a *App) UploadAnnouncementAttachment(courseID int) (*models.FileInfo, error) {
 	path, err := a.openFileDialog(&application.OpenFileDialogOptions{
-		Title:              "Select file to attach",
-		CanChooseFiles:     true,
+		Title:                "Select file to attach",
+		CanChooseFiles:       true,
 		CanCreateDirectories: true,
 	})
 	if err != nil {
@@ -577,13 +582,39 @@ func (a *App) BrowseDirectory() (string, error) {
 // UploadGrades runs the full grade upload workflow in the background.
 // Progress is reported via Wails events: upload:status, upload:file_progress,
 // upload:batch_progress, upload:done, upload:error.
-func (a *App) UploadGrades(courseID int, assignmentID int, csvPath string) {
+func (a *App) UploadGrades(courseID int, assignmentID int, csvPath string) error {
+	a.uploadMu.Lock()
+	defer a.uploadMu.Unlock()
+	if a.uploadDone != nil {
+		select {
+		case <-a.uploadDone:
+		default:
+			return fmt.Errorf("a grade upload is already running; wait for it to finish or cancel it")
+		}
+	}
+	if a.client == nil {
+		return fmt.Errorf("configure Canvas before uploading grades")
+	}
+	a.uploadDecisions = make(chan string, 1)
 	emitter := adapters.NewWailsEmitter()
-	a.cancelUpload, a.uploadDone = uploader.UploadGrades(a.ctx, a.client, emitter, courseID, assignmentID, csvPath)
+	a.cancelUpload, a.uploadDone = uploader.Start(a.ctx, cache.LiveClient(a.client), emitter, courseID, assignmentID, csvPath, a.uploadDecisions)
+	return nil
+}
+
+// ResolveUpload responds to the unmatched-student confirmation.
+func (a *App) ResolveUpload(action string) {
+	a.uploadMu.Lock()
+	defer a.uploadMu.Unlock()
+	select {
+	case a.uploadDecisions <- action:
+	default:
+	}
 }
 
 // CancelUpload cancels a running grade upload.
 func (a *App) CancelUpload() {
+	a.uploadMu.Lock()
+	defer a.uploadMu.Unlock()
 	if a.cancelUpload != nil {
 		a.cancelUpload()
 		a.cancelUpload = nil

@@ -328,6 +328,15 @@ export function NeedsSetup() {
 }
 
 /**
+ * ResolveUpload responds to the unmatched-student confirmation.
+ * @param {string} action
+ * @returns {$CancellablePromise<void>}
+ */
+export function ResolveUpload(action) {
+    return $Call.ByID(3701055214, action);
+}
+
+/**
  * SaveCourseSet persists the course set to config.json.
  * @param {number[]} ids
  * @returns {$CancellablePromise<void>}

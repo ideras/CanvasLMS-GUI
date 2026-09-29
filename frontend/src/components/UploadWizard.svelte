@@ -1,5 +1,5 @@
 <script>
-  import { UploadGrades, CancelUpload, BrowseCSVFile } from '../../bindings/canvaslms-gui/app.js'
+  import { UploadGrades, CancelUpload, BrowseCSVFile, ResolveUpload } from '../../bindings/canvaslms-gui/app.js'
   import { Events } from '@wailsio/runtime'
   import { normalizeCSVPath, pasteCSVPath } from '../lib/upload.js'
 
@@ -14,14 +14,25 @@
   let batchProgress = { completion: 0, state: 'not_started' }
   let error = null
   let statusMsg = ''
+  let unmatched = []
+  let summary = { total: 0, skipped: [], failed: [] }
 
 
-  function startUpload() {
+  async function startUpload() {
     csvPath = normalizeCSVPath(csvPath)
     if (!csvPath) return
     step = 'upload'
     error = null
-    UploadGrades(course.id, assignment.assignment_id || assignment.id, csvPath)
+    unmatched = []
+    summary = { total: 0, skipped: [], failed: [] }
+    fileProgress = { done: 0, total: 0, student: '', file: '' }
+    batchProgress = { completion: 0, state: 'not_started' }
+    statusMsg = 'Reading CSV and fetching course roster…'
+    try {
+      await UploadGrades(course.id, assignment.assignment_id || assignment.id, csvPath)
+    } catch (e) {
+      error = e.message || String(e)
+    }
   }
 
   function cancel() {
@@ -50,7 +61,13 @@
       Events.On('upload:error', (e) => {
         error = e.data.error
       }),
-      Events.On('upload:done', () => {
+      Events.On('upload:unmatched', (e) => {
+        unmatched = e.data.students
+        step = 'validate'
+      }),
+      Events.On('upload:summary', (e) => { summary = e.data }),
+      Events.On('upload:done', (e) => {
+        summary = e.data
         step = 'done'
       }),
     ]
@@ -88,6 +105,18 @@
         <button class="primary" disabled={!csvPath.trim()} on:click={startUpload}>
           Start Upload
         </button>
+      </div>
+
+    {:else if step === 'validate'}
+      <p>These CSV rows do not match Canvas user IDs in the course. Their files and grades will not be uploaded.</p>
+      <ul class="issue-list">
+        {#each unmatched as student}
+          <li>Row {student.row} — ID {student.student_id}: {student.reason}</li>
+        {/each}
+      </ul>
+      <div class="wizard-footer">
+        <button class="secondary" on:click={cancel}>Cancel</button>
+        <button class="primary" on:click={() => { step = 'upload'; ResolveUpload('ignore') }}>Ignore these students and continue</button>
       </div>
 
     <!-- Step: Uploading -->
@@ -150,16 +179,28 @@
       <div class="done-section">
         <p class="done-icon">&#10003;</p>
         <p class="done-title">Upload Complete</p>
-        <p>Grades have been submitted to Canvas for {course?.name}.</p>
+        <p>Canvas finished processing {summary.total} matched students for {course?.name}.</p>
       </div>
       <div class="wizard-footer">
         <button class="primary" on:click={onClose}>Close</button>
+      </div>
+    {/if}
+    {#if summary.skipped?.length || summary.failed?.length || summary.message}
+      <div class="upload-summary">
+        <p>{summary.skipped?.length || 0} skipped; {summary.failed?.length || 0} Canvas failures/result warnings.</p>
+        <ul class="issue-list">
+          {#each summary.skipped || [] as student}<li>Skipped ID {student.student_id} (row {student.row}): {student.reason}</li>{/each}
+          {#each summary.failed || [] as student}<li>Canvas {student.student_id || 'result'}: {student.reason}</li>{/each}
+        </ul>
+        {#if summary.message}<p>{summary.message}</p>{/if}
       </div>
     {/if}
   </div>
 </div>
 
 <style>
+  .issue-list { max-height: 220px; overflow: auto; overflow-wrap: anywhere; padding-left: 20px; font-size: 12px; }
+  .upload-summary { margin-top: 16px; font-size: 12px; }
   .wizard-modal {
     max-width: 480px;
   }
