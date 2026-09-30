@@ -43,6 +43,14 @@ export function CancelUpload() {
 }
 
 /**
+ * ConfirmClose explicitly exits after the user acknowledges the upload warning.
+ * @returns {$CancellablePromise<void>}
+ */
+export function ConfirmClose() {
+    return $Call.ByID(4181451325);
+}
+
+/**
  * ConvertMarkdown converts a Markdown file to PDF. Returns the output path.
  * @param {string} inputPath
  * @param {string} outputPath
@@ -180,6 +188,16 @@ export function ExportScoresCSV(courseID) {
  */
 export function ExportStudentsCSV(courseID) {
     return $Call.ByID(741839237, courseID);
+}
+
+/**
+ * ExportUploadIssues uses a native save dialog. Wails executes service methods
+ * off the GUI thread; only the native picker is dispatched onto that thread.
+ * @param {string} issuesJSON
+ * @returns {$CancellablePromise<string>}
+ */
+export function ExportUploadIssues(issuesJSON) {
+    return $Call.ByID(862872194, issuesJSON);
 }
 
 /**
@@ -325,6 +343,15 @@ export function ListSubmissions(courseID, assignmentID) {
  */
 export function NeedsSetup() {
     return $Call.ByID(737682639);
+}
+
+/**
+ * ResolveUpload responds to the unmatched-student confirmation.
+ * @param {string} action
+ * @returns {$CancellablePromise<void>}
+ */
+export function ResolveUpload(action) {
+    return $Call.ByID(3701055214, action);
 }
 
 /**

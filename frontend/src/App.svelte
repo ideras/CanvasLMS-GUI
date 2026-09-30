@@ -6,7 +6,7 @@
   import SettingsModal from './components/SettingsModal.svelte'
   import { Toaster, toast } from 'svelte-sonner'
   import { Events } from '@wailsio/runtime'
-  import { ListCourses, SelectCourse, GetConfig, GetCurrentCourse, NeedsSetup } from '../bindings/canvaslms-gui/app.js'
+  import { ListCourses, SelectCourse, GetConfig, GetCurrentCourse, NeedsSetup, ConfirmClose } from '../bindings/canvaslms-gui/app.js'
 
   let view = 'home'
   let currentCourse = null
@@ -17,6 +17,19 @@
   let settingsRequired = false   // true on first run (no cancel allowed)
   let courses = []
   let courseSet = []
+  let uploadCourse = null
+  let uploadAssignment = null
+  let uploadSerial = 0
+  let uploadActive = false
+  let closeWarning = false
+  let job = { state: '' }
+  let uploadSummary = { total: 0, skipped: [], failed: [] }
+  let jobStartedAt = 0
+  let jobFinishedAt = 0
+  let clock = Date.now()
+  import { jobLabel, formatElapsed, summaryText, summaryDetails } from './lib/upload.js'
+  $: jobElapsed = formatElapsed(jobStartedAt ? ((jobFinishedAt || clock) - jobStartedAt) / 1000 : 0)
+  $: uploadStatus = job.state ? `Grades: ${jobLabel(job.state)}${jobStartedAt ? ' — ' + jobElapsed : ''}${!uploadActive ? ' — ' + summaryText(uploadSummary) : ''}` : ''
 
   async function loadCourses() {
     try {
@@ -47,7 +60,15 @@
   }
 
   function openUpload(assignment) {
+    if (uploadActive) {
+      toast.warning('A grade upload is already running. Finish it or stop it before starting another.')
+      showUploadWizard = true
+      return
+    }
     currentAssignment = assignment
+    uploadCourse = { ...currentCourse }
+    uploadAssignment = { ...assignment }
+    uploadSerial += 1
     showUploadWizard = true
   }
 
@@ -73,12 +94,38 @@
     const unsubAppError = Events.On('app:error', (e) => {
       toast.error(e.data.message)
     })
-    const unsubUploadDone = Events.On('upload:done', () => {
-      toast.success('Grades uploaded successfully')
-      showUploadWizard = false
+    const timer = setInterval(() => { clock = Date.now() }, 1000)
+    const jobUnsubs = [
+      Events.On('upload:started', () => {
+        uploadActive = true
+        job = { state: 'preparing' }
+        jobStartedAt = 0
+        jobFinishedAt = 0
+        uploadSummary = { total: 0, skipped: [], failed: [] }
+      }),
+      Events.On('upload:batch_progress', (e) => {
+        job = e.data
+        jobStartedAt = Date.now() - (e.data.elapsed_seconds || 0) * 1000
+        clock = Date.now()
+      }),
+      Events.On('upload:summary', (e) => { uploadSummary = e.data }),
+      Events.On('upload:cancelled', () => { uploadActive = false; jobFinishedAt = Date.now(); job = { ...job, state: 'cancelled' } }),
+      Events.On('upload:close_requested', () => { closeWarning = true }),
+    ]
+    const unsubUploadDone = Events.On('upload:done', (e) => {
+      uploadActive = false
+      uploadSummary = e.data
+      jobFinishedAt = Date.now()
+      job = { ...job, state: 'completed' }
+      const options = { description: summaryDetails(e.data), duration: 12000 }
+      if (e.data.failed?.length) toast.warning('Canvas completed: ' + summaryText(e.data), options)
+      else toast.success('Canvas completed: ' + summaryText(e.data), options)
     })
     const unsubUploadError = Events.On('upload:error', (e) => {
-      toast.error(e.data.error || 'Upload failed')
+      uploadActive = false
+      jobFinishedAt = Date.now()
+      job = { ...job, state: job.state === 'failed' ? 'failed' : job.state === 'submitting' ? 'unknown' : job.progress_url ? 'stopped' : 'failed' }
+      toast.error(e.data.error || 'Upload failed', { description: summaryText(uploadSummary) + '\n' + summaryDetails(uploadSummary), duration: 12000 })
     })
 
     startApp()
@@ -87,6 +134,8 @@
       unsubAppError()
       unsubUploadDone()
       unsubUploadError()
+      jobUnsubs.forEach(off => off())
+      clearInterval(timer)
     }
   })
 
@@ -120,7 +169,7 @@
     {#if currentCourse}
       <span class="course-badge">{currentCourse.name}</span>
     {/if}
-    <button class="settings-btn" title="Settings" on:click={() => { settingsRequired = false; showSettingsModal = true }}>
+    <button class="settings-btn" disabled={uploadActive} title={uploadActive ? 'Finish the grade upload before changing Canvas credentials' : 'Settings'} on:click={() => { settingsRequired = false; showSettingsModal = true }}>
       ⚙
     </button>
   </div>
@@ -146,7 +195,7 @@
   {/if}
 </main>
 
-<StatusBar course="{currentCourse}"/>
+<StatusBar course="{currentCourse}" {uploadStatus} onUploadStatus={() => showUploadWizard = true}/>
 
 {#if showCourseModal}
   <CourseModal
@@ -157,12 +206,28 @@
   />
 {/if}
 
-{#if showUploadWizard && currentAssignment}
-  <UploadWizard
-    course="{currentCourse}"
-    assignment="{currentAssignment}"
-    onClose={() => showUploadWizard = false}
-  />
+{#if uploadAssignment}
+  {#key uploadSerial}
+    <div hidden={!showUploadWizard}>
+      <UploadWizard
+        course={uploadCourse}
+        assignment={uploadAssignment}
+        onClose={() => showUploadWizard = false}
+        onBackground={() => showUploadWizard = false}
+      />
+    </div>
+  {/key}
+{/if}
+
+{#if closeWarning}
+  <div class="modal-overlay">
+    <div class="modal">
+      <h2>Grade upload is still active</h2>
+      <p>Closing stops local uploads and job monitoring. A grade job already submitted will continue in Canvas. Its final result will not be available here after exit.</p>
+      <button class="secondary" on:click={() => closeWarning = false}>Keep app open</button>
+      <button class="danger" on:click={() => { closeWarning = false; ConfirmClose() }}>Close app</button>
+    </div>
+  </div>
 {/if}
 
 {#if showSettingsModal}

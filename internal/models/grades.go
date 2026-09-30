@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 // GradeEntry is one row in the batch grade submission payload.
 type GradeEntry struct {
 	StudentID int    `json:"student_id"`
@@ -20,8 +22,12 @@ type GradeData struct {
 
 // BatchProgress mirrors the Canvas Progress object returned by the progress URL.
 type BatchProgress struct {
-	ID             int     `json:"id"`
-	WorkflowState  string  `json:"workflow_state"` // "queued" | "running" | "completed" | "failed"
-	Completion     float64 `json:"completion"`     // 0–100
-	Message        string  `json:"message"`        // populated on failure
+	ID             int             `json:"id"`
+	WorkflowState  string          `json:"workflow_state"` // "queued" | "running" | "completed" | "failed"
+	Completion     float64         `json:"completion"`     // 0–100
+	Message        string          `json:"message"`        // populated on failure
+	Results        json.RawMessage `json:"results,omitempty"`
+	PollingError   string          `json:"-"` // local monitor errors, not Canvas job failure
+	PollingStopped bool            `json:"-"`
+	ElapsedSeconds int64           `json:"-"`
 }

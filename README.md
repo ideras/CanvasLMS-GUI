@@ -90,13 +90,58 @@ Credentials may also be supplied through environment variables, which take prece
 
 Keep credentials local—do not add tokens or the generated `config.json` file to version control. Generate a token under *Account → Settings → New Access Token*.
 
+## Uploading grades
+
+- Type/paste a CSV path or use Browse. Balanced quotes and surrounding whitespace
+  are trimmed on paste/proceed. CSVs must be UTF-8 (a UTF-8 BOM is accepted).
+- Required columns are `student_id` (or `canvas_id`) and `grade`. IDs are **Canvas
+  user IDs**, not SIS/login IDs or email. Duplicate IDs/columns and non-finite
+  grades are rejected. Attachment paths resolve relative to the CSV directory.
+- Each attempt fetches the live, paginated student roster. Unmatched rows can be
+  exported to CSV, ignored, or cancelled. Ignored rows never prepare/upload files
+  or submit grades. An all-unmatched import performs no Canvas writes.
+- All matched students' referenced files are checked for readability before any
+  upload. File, conversion and CSV errors offer Retry/Cancel. Retry re-reads the
+  current path and roster; it does not merely resume the old CSV data.
+- Confirmed uploads are reused within the app session for the same target,
+  absolute path and content hash. Changed files are uploaded again. This does
+  **not** cover app restarts, files deleted remotely, or a lost response after
+  Canvas accepted an upload; those cases can leave duplicate/orphaned files.
+  Unchanged Markdown conversions are also reused when both source and generated
+  PDF hashes match. Linked resources inside Markdown are not part of this key;
+  edit the source or remove its generated PDF to force re-conversion.
+- File uploads retain their completed-file progress bar. Grade submission uses
+  a status spinner and elapsed time: Canvas's bulk-grading implementation does
+  not maintain reliable intermediate `completion` values. Monitoring polls
+  immediately, then backs off from 2 to 30 seconds, with a 15-minute timeout and
+  at most five consecutive transient failures. Authentication failures stop
+  monitoring immediately.
+- Continue in background hides the wizard without stopping its worker. The
+  status-bar indicator reopens it; completion/failure notifications and the
+  wizard retain skipped students and Canvas-reported failures/result warnings.
+  Only one upload runs at a time. Closing an active upload warns before exit;
+  shutdown cancels local work and waits at most three seconds. Stopping monitoring
+  or closing the app **does not cancel a job already submitted to Canvas**.
+- After submission starts, a failed/uncertain outcome does not offer whole-upload
+  Retry, since that could apply grades/comments twice. Check Canvas first.
+  Progress `results` vary by deployment: known structured errors and upstream
+  missing-user messages are identified; unrecognized results remain visible as
+  warnings rather than being silently dropped.
+
 ## Testing
 
 Run the Go test suite with:
 
 ```bash
 go test ./...
-go test -race ./internal/...
+go test -race ./...
+```
+
+Frontend helper tests (Node's built-in runner; no extra dependencies) and build:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 Frontend and desktop behavior (dialogs, event delivery, window lifecycle) is validated with real desktop smoke checks; browser-only Vite preview is not sufficient proof of native integration.

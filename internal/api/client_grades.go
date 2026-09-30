@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
+	"net/url"
 
 	"canvaslms-gui/internal/models"
 )
@@ -56,8 +56,8 @@ func (c *httpCanvasClient) BatchSubmitGrades(ctx context.Context, courseID, assi
 	// Canvas returns a Progress object or a direct response.
 	// Extract the progress URL.
 	var result struct {
-		ID    int    `json:"id"`
-		URL   string `json:"url"`
+		ID  int    `json:"id"`
+		URL string `json:"url"`
 	}
 	if err := decodeJSON(resp, &result); err != nil {
 		return "", fmt.Errorf("decode batch submit response: %w", err)
@@ -66,6 +66,9 @@ func (c *httpCanvasClient) BatchSubmitGrades(ctx context.Context, courseID, assi
 	// Return the progress URL if available, otherwise construct it from the ID.
 	if result.URL != "" {
 		return result.URL, nil
+	}
+	if result.ID <= 0 {
+		return "", fmt.Errorf("Canvas returned no progress URL or valid job ID; submission outcome is unknown")
 	}
 	return fmt.Sprintf("%s/api/v1/progress/%d", c.baseURL, result.ID), nil
 }
@@ -85,36 +88,25 @@ func (c *httpCanvasClient) QueryProgress(ctx context.Context, progressID int) (*
 }
 
 func (c *httpCanvasClient) PollBatchProgress(ctx context.Context, progressURL string) (<-chan models.BatchProgress, error) {
-	ch := make(chan models.BatchProgress)
-
-	go func() {
-		defer close(ch)
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				var p models.BatchProgress
-				if err := c.getJSON(ctx, progressURL, &p); err != nil {
-					// Send failure as a progress event
-					ch <- models.BatchProgress{
-						WorkflowState: "failed",
-						Message:       err.Error(),
-					}
-					return
-				}
-				ch <- p
-				if p.WorkflowState == "completed" || p.WorkflowState == "failed" {
-					return
-				}
-			}
-		}
-	}()
-
-	return ch, nil
+	// Never send the Canvas token to a foreign origin supplied as a job URL.
+	base, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Canvas base URL")
+	}
+	jobURL, err := url.Parse(progressURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Canvas progress URL")
+	}
+	jobURL = base.ResolveReference(jobURL)
+	if jobURL.User != nil || jobURL.Scheme != base.Scheme || jobURL.Host != base.Host {
+		return nil, fmt.Errorf("Canvas progress URL has an unexpected origin")
+	}
+	updates := pollProgress(ctx, func(ctx context.Context) (models.BatchProgress, error) {
+		var p models.BatchProgress
+		err := c.getJSON(ctx, jobURL.String(), &p)
+		return p, err
+	}, gradePollPolicy)
+	return updates, nil
 }
 
 // getJSON fetches a URL and decodes the JSON response.

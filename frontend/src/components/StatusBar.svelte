@@ -1,5 +1,7 @@
 <script>
   export let course = null
+  export let uploadStatus = ''
+  export let onUploadStatus = () => {}
 </script>
 
 <footer>
@@ -15,11 +17,14 @@
     {/if}
   </div>
   <div class="status-right">
-    CanvasLMS v0.1.0
+    {#if uploadStatus}
+      <button class="job-indicator" on:click={onUploadStatus} title="Open grade upload status and student summary">{uploadStatus}</button>
+    {:else}CanvasLMS v0.1.0{/if}
   </div>
 </footer>
 
 <style>
+  .job-indicator { color: inherit; font-size: 11px; background: transparent; padding: 2px 6px; max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer {
     display: flex;
     align-items: center;
