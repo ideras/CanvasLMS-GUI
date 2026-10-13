@@ -43,8 +43,8 @@
   }
 </script>
 
-<div class="modal-overlay" on:click={() => { if (!required && !saving) onClose() }}>
-  <div class="modal" on:click|stopPropagation>
+<div class="modal-overlay" role="presentation" on:click={(e) => { if (e.target === e.currentTarget && !required && !saving) onClose() }}>
+  <div class="modal">
 
     <div class="modal-header">
       <h2>Settings</h2>

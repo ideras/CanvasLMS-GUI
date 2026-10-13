@@ -63,6 +63,9 @@
     return (row) => String(row[rk])
   }
 
+  // Reading these props once at init is intentional: the table's options
+  // (columns, sorting, rowId) are static after creation.
+  // svelte-ignore state_referenced_locally
   const resolvedColumns = columns.map((col) => {
     const colId = col.id ?? col.accessorKey
     return col.snippet && cells[colId]
@@ -87,7 +90,9 @@
     get data() {
       return data
     },
+    // svelte-ignore state_referenced_locally
     initialState: { sorting: initialSorting },
+    // svelte-ignore state_referenced_locally
     getRowId: resolveGetRowId(rowKey),
     columnResizeMode: 'onChange',
     defaultColumn: { minSize: 60 }

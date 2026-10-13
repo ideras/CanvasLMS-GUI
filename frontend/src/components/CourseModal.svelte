@@ -1,5 +1,6 @@
 <script>
   import { SaveCourseSet } from '../../bindings/canvaslms-gui/app.js'
+  import { autofocus } from '../lib/autofocus.js'
 
   export let courses = []
   export let courseSet = []
@@ -36,15 +37,15 @@
   }
 </script>
 
-<div class="modal-overlay" on:click={onClose}>
-  <div class="modal" on:click|stopPropagation>
+<div class="modal-overlay" role="presentation" on:click={(e) => e.target === e.currentTarget && onClose}>
+  <div class="modal">
     <h2>Select Course</h2>
     <input
       type="text"
       placeholder="Search courses..."
       bind:value={search}
       class="search-input"
-      autofocus
+      use:autofocus
     />
     {#if useSet}
       <div class="set-bar">

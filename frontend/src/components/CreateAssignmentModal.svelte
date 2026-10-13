@@ -1,6 +1,7 @@
 <script>
   import { CreateAssignment, GetAssignmentGroups, CreateAssignmentGroup } from '../../bindings/canvaslms-gui/app.js'
   import { toast } from 'svelte-sonner'
+  import { autofocus } from '../lib/autofocus.js'
 
   export let course
   export let onClose
@@ -67,14 +68,14 @@
   }
 </script>
 
-<div class="modal-overlay" on:click={onClose}>
-  <div class="modal" on:click|stopPropagation>
+<div class="modal-overlay" role="presentation" on:click={(e) => e.target === e.currentTarget && onClose}>
+  <div class="modal">
     <h2>Create Assignment</h2>
 
     <form on:submit|preventDefault={handleSubmit}>
       <div class="field">
         <label for="name">Name *</label>
-        <input id="name" type="text" bind:value={name} placeholder="Assignment name" autofocus disabled={creating} />
+        <input id="name" type="text" bind:value={name} placeholder="Assignment name" use:autofocus disabled={creating} />
       </div>
 
       <div class="field-row">
@@ -111,8 +112,8 @@
       </div>
 
       <div class="field">
-        <label>Or create a new group</label>
-        <input type="text" bind:value={newGroupName} placeholder="New group name" disabled={creating || assignmentGroupID > 0} />
+        <label for="new-group-name">Or create a new group</label>
+        <input id="new-group-name" type="text" bind:value={newGroupName} placeholder="New group name" disabled={creating || assignmentGroupID > 0} />
       </div>
 
       <div class="modal-footer">

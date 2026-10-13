@@ -185,14 +185,6 @@
     margin-bottom: 4px;
   }
 
-  .link {
-    background: none;
-    color: var(--frost-blue);
-    font-size: 12px;
-    padding: 0;
-    text-decoration: underline;
-  }
-
   .quick-stats {
     display: flex;
     gap: 16px;

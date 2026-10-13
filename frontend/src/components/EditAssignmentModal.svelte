@@ -1,6 +1,7 @@
 <script>
   import { EditAssignment, GetAssignmentGroups, CreateAssignmentGroup } from '../../bindings/canvaslms-gui/app.js'
   import { toast } from 'svelte-sonner'
+  import { autofocus } from '../lib/autofocus.js'
 
   export let course
   export let assignment   // the existing assignment to edit
@@ -77,8 +78,8 @@
   }
 </script>
 
-<div class="modal-overlay" on:click={onClose}>
-  <div class="modal" on:click|stopPropagation>
+<div class="modal-overlay" role="presentation" on:click={(e) => e.target === e.currentTarget && onClose}>
+  <div class="modal">
     <h2>Edit Assignment</h2>
 
     <form on:submit|preventDefault={handleSubmit}>
@@ -89,7 +90,7 @@
           type="text"
           bind:value={name}
           placeholder="Assignment name"
-          autofocus
+          use:autofocus
           disabled={saving}
         />
       </div>
@@ -142,8 +143,9 @@
       </div>
 
       <div class="field">
-        <label>Or create a new group</label>
+        <label for="new-group-name">Or create a new group</label>
         <input
+          id="new-group-name"
           type="text"
           bind:value={newGroupName}
           placeholder="New group name"

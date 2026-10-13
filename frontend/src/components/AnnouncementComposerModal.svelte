@@ -4,6 +4,7 @@
   import RichTextEditor from './RichTextEditor.svelte'
   import { CreateAnnouncement, UpdateAnnouncement, UploadAnnouncementAttachment } from '../../bindings/canvaslms-gui/app.js'
   import { toast } from 'svelte-sonner'
+  import { autofocus } from '../lib/autofocus.js'
 
   export let course
   /** Pass null for create mode, or an Announcement object for edit mode. */
@@ -78,10 +79,8 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="modal-backdrop" on:click={close}>
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal-content" on:click|stopPropagation in:fly|global={{ y: 20, duration: 200 }}>
+<div class="modal-backdrop" role="presentation" on:click={(e) => e.target === e.currentTarget && close}>
+  <div class="modal-content" in:fly|global={{ y: 20, duration: 200 }}>
     <div class="modal-header">
       <h2>{modalTitle}</h2>
       <button class="btn-close" on:click={close}>✕</button>
@@ -90,7 +89,7 @@
     <div class="modal-body">
       <label>
         Title
-        <input type="text" bind:value={title} placeholder="Announcement title" autofocus={!isEdit} />
+        <input type="text" bind:value={title} placeholder="Announcement title" use:autofocus={!isEdit} />
       </label>
 
       <div class="field">

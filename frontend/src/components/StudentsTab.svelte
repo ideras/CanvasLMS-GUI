@@ -143,12 +143,6 @@
     text-decoration: underline;
   }
 
-  .status {
-    text-align: center;
-    padding: 32px;
-    color: var(--text-secondary);
-  }
-
   button.small {
     padding: 5px 12px;
     font-size: 12px;

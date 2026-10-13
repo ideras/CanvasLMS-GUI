@@ -55,8 +55,8 @@
   $: canStart = selectedDir !== '' && state === 'idle'
 </script>
 
-<div class="modal-overlay" on:click={() => { if (state !== 'downloading') onClose() }}>
-  <div class="modal" on:click|stopPropagation>
+<div class="modal-overlay" role="presentation" on:click={(e) => { if (e.target === e.currentTarget && state !== 'downloading') onClose() }}>
+  <div class="modal">
 
     <!-- Header -->
     <div class="modal-header">
@@ -71,7 +71,7 @@
 
     <!-- Folder selector -->
     <div class="field">
-      <label>Output Folder</label>
+      <span class="field-label">Output Folder</span>
       <div class="folder-row">
         <span class="folder-path" class:placeholder={!selectedDir}>
           {selectedDir || 'No folder selected'}
@@ -175,7 +175,7 @@
     margin-bottom: 18px;
   }
 
-  .field label {
+  .field .field-label {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);

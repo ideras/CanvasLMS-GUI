@@ -15,5 +15,4 @@ dev:
 
 clean:
 	rm -rf bin build/bin
-	$(WAILS3) task common:install:frontend:deps --force 2>/dev/null || true
 	rm -rf frontend/dist frontend/node_modules frontend/bindings

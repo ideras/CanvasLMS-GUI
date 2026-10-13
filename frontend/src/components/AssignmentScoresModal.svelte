@@ -143,8 +143,8 @@
   ]
 </script>
 
-<div class="modal-overlay" on:click={onClose}>
-  <div class="modal" on:click|stopPropagation>
+<div class="modal-overlay" role="presentation" on:click={(e) => e.target === e.currentTarget && onClose}>
+  <div class="modal">
 
     <!-- Header -->
     <div class="modal-header">
